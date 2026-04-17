@@ -1,7 +1,10 @@
 import { CapacitorConfig } from '@capacitor/cli';
 
 const config: CapacitorConfig = {
-  // ... your existing config
+  appId: 'com.maahhha.formatforge',
+  appName: 'FormatForge Pro',
+  webDir: 'dist',
+  bundledWebRuntime: false,
   server: {
     cleartext: true,
     allowNavigation: ['https://pdf-service.onrender.com']
