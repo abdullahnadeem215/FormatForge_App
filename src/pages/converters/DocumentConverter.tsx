@@ -35,7 +35,7 @@ export default function DocumentConverter() {
       const formData = new FormData();
       formData.append('file', file);
 
-      const response = await fetch('/api/convert/adobe-to-docx', {
+      const response = await fetch('https://pdf-services-aopu.onrender.com/convert-pdf-to-word', {
         method: 'POST',
         body: formData,
       });
