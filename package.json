@@ -10,8 +10,9 @@
     "start": "tsx server.ts",
     "preview": "vite preview",
     "clean": "rm -rf dist",
-    "lint": "tsc --noEmit"
-  },
+    "lint": "tsc --noEmit",
+    "start:pdf-server": "node render-pdf-server.js"
+}
   "dependencies": {
     "@adobe/pdfservices-node-sdk": "^3.4.1",
     "@capacitor/core": "^8.3.1",
