@@ -4,15 +4,15 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "dev": "tsx server.ts",
-    "build": "tsc && vite build",
-    "vercel-build": "npm run build",
-    "start": "tsx server.ts",
-    "preview": "vite preview",
-    "clean": "rm -rf dist",
-    "lint": "tsc --noEmit",
-    "start:pdf-server": "node render-pdf-server.js"
-  },
+  "dev": "tsx server.ts",
+  "build": "tsc && vite build",
+  "vercel-build": "npm run build",
+  "start": "tsx server.ts",
+  "preview": "vite preview",
+  "clean": "rm -rf dist",
+  "lint": "tsc --noEmit",
+  "start:pdf-server": "node render-pdf-server.js"
+},
   "dependencies": {
     "@capacitor/android": "^7.2.0",
     "@capacitor/core": "^7.2.0",
