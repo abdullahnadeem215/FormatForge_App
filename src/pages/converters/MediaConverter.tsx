@@ -1,6 +1,8 @@
 import React, { useState, useCallback, useEffect } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { useLocation } from 'react-router-dom';
+import { Filesystem, Directory } from '@capacitor/filesystem';
+import { Share } from '@capacitor/share';
 import { 
   Music, 
   Video, 
@@ -49,6 +51,34 @@ export default function MediaConverter() {
       setSelectedFile(e.target.files[0]);
       setResult(null);
       setError(null);
+    }
+  };
+  
+  // Save function for Capacitor
+  const saveToDevice = async (blob: Blob, fileName: string) => {
+    try {
+      const reader = new FileReader();
+      reader.readAsDataURL(blob);
+      reader.onloadend = async () => {
+        const base64 = (reader.result as string).split(',')[1];
+        
+        await Filesystem.writeFile({
+          path: fileName,
+          data: base64,
+          directory: Directory.Documents
+        });
+        
+        alert(`✅ Saved to Documents/${fileName}`);
+        
+        await Share.share({
+          title: 'File Converted',
+          text: 'Check out my converted file!',
+          url: `file://${fileName}`
+        });
+      };
+    } catch (error) {
+      console.error('Save error:', error);
+      alert('Failed to save file. Please check storage permissions.');
     }
   };
   
@@ -108,6 +138,9 @@ export default function MediaConverter() {
         status: 'completed',
         file_name: name
       }, blob);
+      
+      // Save to device using Capacitor Filesystem
+      await saveToDevice(blob, name);
       
       // Cleanup
       await ffmpeg.deleteFile(inputFileName);
@@ -293,12 +326,12 @@ export default function MediaConverter() {
                         </div>
                         <audio src={result.url} controls className="w-full h-10 filter invert opacity-80" />
                         <button 
-                          onClick={() => {
-                            const a = document.createElement('a'); a.href = result.url; a.download = result.name; a.click();
+                          onClick={async () => {
+                            await saveToDevice(result.blob, result.name);
                           }}
                           className="w-full py-4 bg-green-500 text-black font-bold rounded-xl flex items-center justify-center gap-2 hover:bg-green-400 transition-colors"
                         >
-                          <Download className="w-5 h-5" /> Download Master
+                          <Download className="w-5 h-5" /> Save to Device
                         </button>
                       </div>
                     </motion.div>
