@@ -1,6 +1,18 @@
 import React, { useState, useEffect } from 'react';
 import { SplashScreen } from '@capacitor/splash-screen';
-await SplashScreen.hide();
+function App() {
+  const [isLoading, setIsLoading] = useState(true);
+
+  useEffect(() => {
+    const hideSplash = async () => {
+      await SplashScreen.hide();
+    };
+    hideSplash();
+  }, []);
+
+  if (isLoading) {
+    return <LoadingScreen onLoadingComplete={() => setIsLoading(false)} />;
+  }
 import { 
   BrowserRouter as Router, 
   Routes, 
