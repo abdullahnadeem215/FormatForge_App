@@ -1,4 +1,14 @@
 import React, { useState, useEffect } from 'react';
+import { useEffect } from 'react';
+import { SplashScreen } from '@capacitor/splash-screen';
+
+function App() {
+  useEffect(() => {
+    const hideSplash = async () => {
+      await SplashScreen.hide();
+    };
+    hideSplash();
+  }, []);
 import { 
   BrowserRouter as Router, 
   Routes, 
