@@ -168,6 +168,9 @@ export default function ImageConverter() {
   };
 
   // ========== SAVE FUNCTION - WORKS ON BOTH WEB AND MOBILE ==========
+  import { Filesystem, Directory } from '@capacitor/filesystem';
+  import { Share } from '@capacitor/share';
+
   const downloadFile = async (item: ConversionQueueItem) => {
   if (!item.convertedBlob) return;
   
