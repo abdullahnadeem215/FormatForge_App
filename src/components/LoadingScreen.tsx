@@ -1,5 +1,4 @@
 import React, { useEffect, useState } from 'react';
-import { SplashScreen } from '@capacitor/splash-screen';
 import { Zap, Loader2, Lightbulb } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 
@@ -55,12 +54,6 @@ export function LoadingScreen({ onLoadingComplete, minDisplayTime = 2500 }: Load
         setTimeout(() => {
           setFadeOut(true);
           setTimeout(() => {
-            // Hide native splash if applicable
-            try {
-              SplashScreen.hide();
-            } catch (e) {
-              // Silent fail if not on device
-            }
             onLoadingComplete();
           }, 800);
         }, remaining);
@@ -69,16 +62,8 @@ export function LoadingScreen({ onLoadingComplete, minDisplayTime = 2500 }: Load
 
     const timer = setTimeout(runSteps, 100);
 
-    // Initial splash hide delay for native apps
-    const hideSplashTimer = setTimeout(() => {
-      try {
-        SplashScreen.hide();
-      } catch (e) {}
-    }, 500);
-
     return () => {
       clearTimeout(timer);
-      clearTimeout(hideSplashTimer);
     };
   }, [minDisplayTime, onLoadingComplete]);
 
