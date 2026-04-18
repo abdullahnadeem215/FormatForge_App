@@ -29,7 +29,7 @@ import ImageConverter from './pages/converters/ImageConverter';
 import MediaConverter from './pages/converters/MediaConverter';
 import DocumentConverter from './pages/converters/DocumentConverter';
 
-export default function App() {
+function App() {
   const [isLoading, setIsLoading] = useState(true);
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const { userId } = useStorage();
@@ -131,3 +131,5 @@ function SidebarLink({ to, icon, label, onClick }: { to: string, icon: React.Rea
     </Link>
   );
 }
+
+export default App;
