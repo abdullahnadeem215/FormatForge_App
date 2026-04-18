@@ -66,7 +66,7 @@ export default function Home() {
             What are we <span className="text-white font-medium italic">forging</span> today?
           </h1>
           <p className="text-text-dim text-sm mt-3 max-w-md leading-relaxed">
-            Revolutionary offline media conversion powered by modern tech and AI. 
+            Revolutionary offline media conversion powered by modern tech. 
             Choose a tool below to begin.
           </p>
         </div>
@@ -87,7 +87,7 @@ export default function Home() {
             >
               {converter.isAI ? (
                 <span className="absolute top-6 right-6 px-2.5 py-1 bg-purple-500/10 border border-purple-500/20 rounded-md text-[10px] font-bold text-purple-400 uppercase tracking-wider">
-                  Gemini 2.5 Flash
+                  Get Summary & Docx 
                 </span>
               ) : (
                 <span className="absolute top-6 right-6 px-2.5 py-1 bg-text-dim/5 border border-text-dim/20 rounded-md text-[10px] font-bold text-text-dim uppercase tracking-wider">

@@ -16,6 +16,8 @@ import { deleteConversion } from '../utils/storage';
 import { getFileBlob } from '../utils/db';
 import { saveAs } from 'file-saver';
 import { AlertCircle } from 'lucide-react';
+import { Filesystem, Directory } from '@capacitor/filesystem';
+import { Share } from '@capacitor/share';
 
 export default function HistoryPage() {
   const { history, refreshHistory } = useStorage();
@@ -28,12 +30,40 @@ export default function HistoryPage() {
 
   const [downloadError, setDownloadError] = useState<string | null>(null);
 
+  // Capacitor Filesystem save function for device
+  const saveToDevice = async (blob: Blob, fileName: string) => {
+    try {
+      const reader = new FileReader();
+      reader.readAsDataURL(blob);
+      reader.onloadend = async () => {
+        const base64 = (reader.result as string).split(',')[1];
+        
+        await Filesystem.writeFile({
+          path: fileName,
+          data: base64,
+          directory: Directory.Documents
+        });
+        
+        alert(`✅ Saved to Documents/${fileName}`);
+        
+        await Share.share({
+          title: 'File Downloaded',
+          text: 'Check out my converted file!',
+          url: `file://${fileName}`
+        });
+      };
+    } catch (error) {
+      console.error('Save error:', error);
+      alert('Failed to save file. Please check storage permissions.');
+    }
+  };
+
   const handleDownload = async (conv: any) => {
     try {
       setDownloadError(null);
       const blob = await getFileBlob(conv.id);
       if (blob) {
-        saveAs(blob, conv.file_name);
+        await saveToDevice(blob, conv.file_name);
       } else {
         setDownloadError(`File "${conv.file_name}" is no longer in local cache.`);
         setTimeout(() => setDownloadError(null), 3000);
@@ -113,7 +143,7 @@ export default function HistoryPage() {
               key={conv.id}
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
-              className="group p-4 bg-surface border border-border rounded-2xl flex items-center gap-4 hover:border-white/10 transition-all"
+              className="group p-4 bg-surface border border-border rounded-2xl flex items-center gap-4 transition-all"
             >
               <div className="p-3 bg-white/5 rounded-xl">
                 {getIcon(conv.type)}
@@ -128,17 +158,17 @@ export default function HistoryPage() {
                 </div>
               </div>
 
-              <div className="flex items-center gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
+              <div className="flex items-center gap-2">
                 <button 
                   onClick={() => handleDownload(conv)}
-                  className="p-2 hover:bg-green-500/10 rounded-lg text-gray-400 hover:text-green-500 transition-all"
+                  className="p-2 rounded-lg text-gray-400 transition-colors"
                   title="Download File"
                 >
                   <Download className="w-5 h-5" />
                 </button>
                 <button 
                   onClick={() => handleDelete(conv.id)}
-                  className="p-2 hover:bg-red-500/10 rounded-lg text-gray-400 hover:text-red-500 transition-all"
+                  className="p-2 rounded-lg text-gray-400 transition-colors"
                   title="Delete from History"
                 >
                   <Trash2 className="w-5 h-5" />

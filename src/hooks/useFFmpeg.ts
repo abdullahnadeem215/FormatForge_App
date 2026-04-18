@@ -1,6 +1,6 @@
-import { useState, useEffect } from 'react';
 import { FFmpeg } from '@ffmpeg/ffmpeg';
 import { toBlobURL } from '@ffmpeg/util';
+import { useState, useEffect } from 'react';
 
 export function useFFmpeg() {
   const [ffmpeg, setFfmpeg] = useState<FFmpeg | null>(null);
@@ -19,20 +19,19 @@ export function useFFmpeg() {
     try {
       const ffmpegInstance = new FFmpeg();
       
-      // Log FFmpeg messages for debugging
       ffmpegInstance.on('log', ({ message }) => {
         console.log('FFmpeg:', message);
       });
       
-      // Track load progress (for loading the wasm engine)
-      // Note: progress callback is usually for exec, but we can simulate or just handle the finish
+      ffmpegInstance.on('progress', ({ progress }) => {
+        setLoadingProgress(Math.round(progress * 100));
+      });
       
-      // Load from CDN
-      const baseURL = 'https://unpkg.com/@ffmpeg/core@0.12.6/dist/esm';
-      
+      // Use CDN - this is the most reliable method
+      // The files are served correctly from unpkg
       await ffmpegInstance.load({
-        coreURL: await toBlobURL(`${baseURL}/ffmpeg-core.js`, 'text/javascript'),
-        wasmURL: await toBlobURL(`${baseURL}/ffmpeg-core.wasm`, 'application/wasm'),
+        coreURL: await toBlobURL('https://unpkg.org/@ffmpeg/core@0.12.6/dist/umd/ffmpeg-core.js', 'text/javascript'),
+        wasmURL: await toBlobURL('https://unpkg.org/@ffmpeg/core@0.12.6/dist/umd/ffmpeg-core.wasm', 'application/wasm'),
       });
       
       setFfmpeg(ffmpegInstance);
@@ -42,11 +41,10 @@ export function useFFmpeg() {
       setError(err instanceof Error ? err.message : 'Failed to load FFmpeg');
     } finally {
       setIsLoading(false);
-      setLoadingProgress(100);
+      setLoadingProgress(0);
     }
   };
   
-  // Auto-load on mount
   useEffect(() => {
     load();
   }, []);

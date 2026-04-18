@@ -48,7 +48,6 @@ function App() {
   return (
     <Router>
       <div className="min-h-screen bg-bg-deep text-white flex">
-        {/* Mobile Sidebar Toggle */}
         <button 
           onClick={() => setIsSidebarOpen(!isSidebarOpen)}
           className="lg:hidden fixed top-4 left-4 z-50 p-2 bg-surface border border-border rounded-lg"
@@ -56,7 +55,6 @@ function App() {
           {isSidebarOpen ? <X /> : <Menu />}
         </button>
 
-        {/* Sidebar */}
         <aside className={cn(
           "fixed inset-y-0 left-0 z-40 w-64 bg-bg-deep border-r border-border transform transition-transform duration-300 ease-in-out lg:relative lg:translate-x-0",
           isSidebarOpen ? "translate-x-0" : "-translate-x-full"
@@ -84,7 +82,6 @@ function App() {
           </div>
         </aside>
 
-        {/* Main Content */}
         <main className="flex-1 relative overflow-y-auto">
           <div className="max-w-5xl mx-auto p-6 lg:p-10">
             <AnimatePresence mode="wait">
