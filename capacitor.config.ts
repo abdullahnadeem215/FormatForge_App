@@ -6,7 +6,14 @@ const config: CapacitorConfig = {
   webDir: 'dist',
   server: {
     cleartext: true,
-    allowNavigation: ['https://pdf-service.onrender.com']
+    allowNavigation: ['https://pdf-services-aopu.onrender.com']
+  },
+  plugins: {
+    SplashScreen: {
+      launchShowDuration: 0,  // Set to 0 to disable
+      launchAutoHide: true,
+      showSpinner: false
+    }
   }
 };
 
