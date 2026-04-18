@@ -22,6 +22,11 @@ import { cn } from '../../lib/utils';
 import JSZip from 'jszip';
 import { saveAs } from 'file-saver';
 
+// Check if running in Capacitor (mobile app)
+const isCapacitor = () => {
+  return !!(window as any).Capacitor;
+};
+
 interface ConversionQueueItem {
   id: string;
   file: File;
@@ -53,8 +58,8 @@ export default function ImageConverter() {
     if (!selectedFiles) return;
     
     const newFiles: ConversionQueueItem[] = [];
-    
     const filesArray = Array.from(selectedFiles);
+    
     for (let i = 0; i < filesArray.length; i++) {
       const file = filesArray[i];
       const previewUrl = URL.createObjectURL(file);
@@ -139,7 +144,7 @@ export default function ImageConverter() {
             item.convertedSize = result.blob.size;
             item.status = 'completed';
             
-            // Save to history
+            // Save to history (works on both web and mobile)
             saveConversion({
                 type: 'image',
                 input_format: item.file.name.split('.').pop() || '',
@@ -162,11 +167,22 @@ export default function ImageConverter() {
     setIsConverting(false);
   };
 
+  // ========== SAVE FUNCTION - WORKS ON BOTH WEB AND MOBILE ==========
   const downloadFile = (item: ConversionQueueItem) => {
     if (!item.convertedBlob) return;
+    
     const ext = selectedFormat === 'jpeg' ? 'jpg' : selectedFormat;
-    const name = item.name.substring(0, item.name.lastIndexOf('.')) + '.' + ext;
-    saveAs(item.convertedBlob, name);
+    const fileName = `${item.name.substring(0, item.name.lastIndexOf('.'))}.${ext}`;
+    
+    // Create download link
+    const url = URL.createObjectURL(item.convertedBlob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = fileName;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
   };
 
   const downloadAllAsZip = async () => {
@@ -181,7 +197,12 @@ export default function ImageConverter() {
     });
 
     const content = await zip.generateAsync({ type: 'blob' });
-    saveAs(content, `converted_images_${Date.now()}.zip`);
+    const url = URL.createObjectURL(content);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `converted_images_${Date.now()}.zip`;
+    a.click();
+    URL.revokeObjectURL(url);
   };
 
   const handleWidthChange = (val: string) => {
