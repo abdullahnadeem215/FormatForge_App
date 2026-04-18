@@ -306,7 +306,7 @@ export default function ImageConverter() {
                             SAVE
                           </button>
                         )}
-                        {item.status === 'failed' && <AlertCircle className="w-4 h-4 text-red-500" title={item.error} />}
+                        {item.status === 'failed' && <AlertCircle className="w-4 h-4 text-red-500" />}
                         {!isConverting && (
                           <button onClick={() => removeFile(item.id)} className="p-1.5 hover:bg-red-500/10 hover:text-red-500 text-text-dim rounded-lg transition-colors">
                             <Trash2 className="w-3.5 h-3.5" />
