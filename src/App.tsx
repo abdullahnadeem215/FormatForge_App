@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { SplashScreen } from '@capacitor/splash-screen';
+await SplashScreen.hide();
 import { 
   BrowserRouter as Router, 
   Routes, 
