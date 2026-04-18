@@ -168,22 +168,41 @@ export default function ImageConverter() {
   };
 
   // ========== SAVE FUNCTION - WORKS ON BOTH WEB AND MOBILE ==========
-  const downloadFile = (item: ConversionQueueItem) => {
-    if (!item.convertedBlob) return;
-    
+  const downloadFile = async (item: ConversionQueueItem) => {
+  if (!item.convertedBlob) return;
+  
+  try {
     const ext = selectedFormat === 'jpeg' ? 'jpg' : selectedFormat;
     const fileName = `${item.name.substring(0, item.name.lastIndexOf('.'))}.${ext}`;
     
-    // Create download link
-    const url = URL.createObjectURL(item.convertedBlob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = fileName;
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-    URL.revokeObjectURL(url);
-  };
+    // Convert blob to base64
+    const reader = new FileReader();
+    reader.readAsDataURL(item.convertedBlob);
+    reader.onloadend = async () => {
+      const base64 = (reader.result as string).split(',')[1];
+      
+      // Save using Capacitor Filesystem
+      await Filesystem.writeFile({
+        path: fileName,
+        data: base64,
+        directory: Directory.Documents
+      });
+      
+      // Show success message
+      alert(`✅ Saved to Documents/${fileName}`);
+      
+      // Option to share
+      await Share.share({
+        title: 'Image Converted',
+        text: 'Check out my converted image!',
+        url: `file://${fileName}`
+      });
+    };
+  } catch (error) {
+    console.error('Save error:', error);
+    alert('Failed to save file. Please check storage permissions.');
+  }
+};
 
   const downloadAllAsZip = async () => {
     const completed = files.filter(f => f.status === 'completed' && f.convertedBlob);
