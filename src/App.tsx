@@ -1,14 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { useEffect } from 'react';
 import { SplashScreen } from '@capacitor/splash-screen';
-
-function App() {
-  useEffect(() => {
-    const hideSplash = async () => {
-      await SplashScreen.hide();
-    };
-    hideSplash();
-  }, []);
 import { 
   BrowserRouter as Router, 
   Routes, 
@@ -42,6 +33,13 @@ export default function App() {
   const [isLoading, setIsLoading] = useState(true);
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const { userId } = useStorage();
+
+  useEffect(() => {
+    const hideSplash = async () => {
+      await SplashScreen.hide();
+    };
+    hideSplash();
+  }, []);
 
   if (isLoading) {
     return <LoadingScreen onLoadingComplete={() => setIsLoading(false)} />;
