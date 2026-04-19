@@ -7,10 +7,8 @@ import { cn } from '../../lib/utils';
 import { Filesystem, Directory } from '@capacitor/filesystem';
 import { Share } from '@capacitor/share';
 
-// Stirling-PDF API endpoint - change this to your server URL
-// For local development: http://localhost:8080
-// For mobile testing on same WiFi: http://YOUR_COMPUTER_IP:8080
-const STIRLING_API_URL = 'http://localhost:8080';
+// Gotenberg API endpoint - change this to your Render URL
+const GOTENBERG_API_URL = 'https://gotenberg-pdf.onrender.com';
 
 export default function DocumentConverter() {
   const [file, setFile] = useState<File | null>(null);
@@ -65,10 +63,10 @@ export default function DocumentConverter() {
 
     try {
       const formData = new FormData();
-      formData.append('fileInput', file);
+      formData.append('files', file);
 
-      // Call Stirling-PDF API for PDF to Word conversion
-      const response = await fetch(`${STIRLING_API_URL}/api/v1/convert/pdf/word`, {
+      // Call Gotenberg API for PDF to Word conversion
+      const response = await fetch(`${GOTENBERG_API_URL}/forms/libreoffice/convert`, {
         method: 'POST',
         body: formData,
       });
@@ -88,7 +86,7 @@ export default function DocumentConverter() {
       };
 
       setResult(conversionResult);
-      setSummary("PDF converted to Word successfully using Stirling-PDF (offline, local processing)");
+      setSummary("PDF converted to Word successfully using Gotenberg (lightweight, fast)");
 
       // Save to history locally
       saveConversion({
@@ -105,7 +103,7 @@ export default function DocumentConverter() {
       await saveToDevice(docxBlob, conversionResult.name);
 
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Processing failed. Ensure Stirling-PDF is running at ' + STIRLING_API_URL);
+      setError(err instanceof Error ? err.message : 'Processing failed. Ensure Gotenberg is running.');
       console.error(err);
     } finally {
       setProcessing(false);
@@ -130,12 +128,12 @@ export default function DocumentConverter() {
     >
       <header className="space-y-2">
         <div className="flex items-center gap-2">
-          <h2 className="text-3xl font-light tracking-tight">PDF FORGE</h2>
+          <h2 className="text-3xl font-light tracking-tight">PDF-FORGE</h2>
           <span className="px-2.5 py-1 bg-purple-500/10 border border-purple-500/20 rounded-md text-[10px] font-bold text-purple-400 uppercase tracking-wider">
-            Stirling-PDF
+            Gotenberg PDF
           </span>
         </div>
-        <p className="text-text-dim text-sm">Convert PDF to Word using PDF-FORGE. 100% offline, no API keys, no usage limits.</p>
+        <p className="text-text-dim text-sm">Convert PDF to Word using PDF-FORGE. Lightweight and fast.</p>
       </header>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
@@ -156,7 +154,7 @@ export default function DocumentConverter() {
                 </div>
                 <div>
                   <p className="text-lg font-medium">Upload a PDF document</p>
-                  <p className="text-sm text-text-dim">Converts to editable Word format locally</p>
+                  <p className="text-sm text-text-dim">Converts to editable Word format</p>
                 </div>
               </div>
             </div>
@@ -214,11 +212,11 @@ export default function DocumentConverter() {
             
             <div className="space-y-2">
               <div className="p-3 rounded-xl border border-purple-500 bg-purple-500/5">
-                <div className="font-bold text-sm">100% Offline Processing</div>
-                <div className="text-[10px] opacity-70">No internet required after setup</div>
+                <div className="font-bold text-sm">Lightweight & Fast</div>
+                <div className="text-[10px] opacity-70">Optimized for cloud deployment</div>
               </div>
               <div className="p-3 rounded-xl border border-purple-500 bg-purple-500/5">
-                <div className="font-bold text-sm">No API Keys</div>
+                <div className="font-bold text-sm">No Subscription</div>
                 <div className="text-[10px] opacity-70">Completely free, no usage limits</div>
               </div>
               <div className="p-3 rounded-xl border border-purple-500 bg-purple-500/5">
@@ -228,7 +226,7 @@ export default function DocumentConverter() {
             </div>
 
             <p className="text-xs text-text-dim leading-relaxed">
-              PDF-FORGE runs locally on your computer. All PDF processing happens offline—your files never leave your network.
+              PDF-FORGE converts your PDF to Word.
             </p>
 
             <button
