@@ -31,7 +31,6 @@ export default function DocumentConverter() {
     setSummary(null);
 
     try {
-      // Convert file to base64 for Gemini
       const reader = new FileReader();
       const base64Promise = new Promise<string>((resolve) => {
         reader.onload = () => {
@@ -42,7 +41,6 @@ export default function DocumentConverter() {
       reader.readAsDataURL(file);
       const base64 = await base64Promise;
       
-      // Get Summary via Gemini
       const extractedText = await summarizePdf(base64);
 
       const conversionResult = {
@@ -53,7 +51,6 @@ export default function DocumentConverter() {
       setResult(conversionResult);
       setSummary(extractedText);
 
-      // Save to history locally (as text)
       const textBlob = new Blob([extractedText], { type: 'text/plain' });
       saveConversion({
         type: 'document',
@@ -99,7 +96,7 @@ export default function DocumentConverter() {
             AI Summary
           </span>
         </div>
-        <p className="text-text-dim text-sm">Extract text and get intelligent summaries from your PDF documents using AI.</p>
+        <p className="text-text-dim text-sm">Extract text and get intelligent summaries from your PDF documents AI.</p>
       </header>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
