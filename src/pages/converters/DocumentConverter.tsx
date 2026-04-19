@@ -31,37 +31,7 @@ export default function DocumentConverter() {
     setSummary(null);
 
     try {
-      // 1. Convert via Adobe PDF Services
-      const formData = new FormData();
-      formData.append('file', file);
-
-      const response = await fetch('https://pdf-services-aopu.onrender.com/convert-pdf-to-word', {
-        method: 'POST',
-        body: formData,
-      });
-
-      if (!response.ok) {
-        let errorMessage = 'Adobe conversion failed';
-        try {
-          const contentType = response.headers.get('content-type');
-          const text = await response.text();
-          
-          if (contentType && contentType.includes('application/json') && text.trim()) {
-            const errData = JSON.parse(text);
-            errorMessage = errData.error || errorMessage;
-          } else if (text.trim()) {
-            errorMessage = text;
-          }
-        } catch (e) {
-          console.error('Error parsing server response:', e);
-        }
-        throw new Error(errorMessage);
-      }
-
-      const adobeBlob = await response.blob();
-      const docUrl = URL.createObjectURL(adobeBlob);
-
-      // 2. Get Summary via Gemini
+      // Convert file to base64 for Gemini
       const reader = new FileReader();
       const base64Promise = new Promise<string>((resolve) => {
         reader.onload = () => {
@@ -72,27 +42,28 @@ export default function DocumentConverter() {
       reader.readAsDataURL(file);
       const base64 = await base64Promise;
       
-      const sum = await summarizePdf(base64); 
+      // Get Summary via Gemini
+      const extractedText = await summarizePdf(base64);
 
       const conversionResult = {
-        isAdobe: true,
-        docUrl,
-        name: file.name.substring(0, file.name.lastIndexOf('.')) + '.docx'
+        extractedText,
+        name: file.name.substring(0, file.name.lastIndexOf('.')) + '.txt'
       };
 
       setResult(conversionResult);
-      setSummary(sum);
+      setSummary(extractedText);
 
-      // Save to history locally
+      // Save to history locally (as text)
+      const textBlob = new Blob([extractedText], { type: 'text/plain' });
       saveConversion({
         type: 'document',
         input_format: 'pdf',
-        output_format: 'docx',
+        output_format: 'txt',
         input_size: file.size,
-        output_size: adobeBlob.size,
+        output_size: textBlob.size,
         status: 'completed',
         file_name: conversionResult.name
-      }, adobeBlob);
+      }, textBlob);
 
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Processing failed. Ensure the file is valid.');
@@ -103,11 +74,14 @@ export default function DocumentConverter() {
   };
 
   const downloadResult = () => {
-    if (!result?.docUrl) return;
+    if (!result?.extractedText) return;
+    const blob = new Blob([result.extractedText], { type: 'text/plain' });
+    const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
-    a.href = result.docUrl;
-    a.download = result.name || 'document.docx';
+    a.href = url;
+    a.download = result.name || 'extracted_text.txt';
     a.click();
+    URL.revokeObjectURL(url);
   };
 
   return (
@@ -122,10 +96,10 @@ export default function DocumentConverter() {
         <div className="flex items-center gap-2">
           <h2 className="text-3xl font-light tracking-tight">Document Pro</h2>
           <span className="px-2.5 py-1 bg-purple-500/10 border border-purple-500/20 rounded-md text-[10px] font-bold text-purple-400 uppercase tracking-wider">
-            Adobe PDF Services
+            Gemini AI
           </span>
         </div>
-        <p className="text-text-dim text-sm">Professional PDF to Word conversion powered by Adobe ®, featuring Gemini AI intelligent summaries.</p>
+        <p className="text-text-dim text-sm">Extract text and get intelligent summaries from your PDF documents using Google Gemini AI.</p>
       </header>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
@@ -146,7 +120,7 @@ export default function DocumentConverter() {
                 </div>
                 <div>
                   <p className="text-lg font-medium">Upload a PDF document</p>
-                  <p className="text-sm text-text-dim">Supports Professional DOCX Output</p>
+                  <p className="text-sm text-text-dim">Gemini AI will extract text and provide a summary</p>
                 </div>
               </div>
             </div>
@@ -154,20 +128,19 @@ export default function DocumentConverter() {
             <div className="space-y-6">
               <div className="p-8 bg-surface border border-border rounded-[24px] space-y-6">
                 <div className="flex items-center justify-between">
-                  <h3 className="text-xl font-semibold">Document Ready</h3>
+                  <h3 className="text-xl font-semibold">Text Extracted</h3>
                   <button onClick={downloadResult} className="flex items-center gap-2 text-sm font-bold text-purple-400 hover:text-purple-300 transition-colors">
-                    <Download className="w-4 h-4" /> Download DOCX
+                    <Download className="w-4 h-4" /> Download TXT
                   </button>
                 </div>
 
-                <div className="bg-black/20 p-12 rounded-xl border border-dashed border-border flex flex-col items-center justify-center text-center gap-4">
-                   <div className="p-4 bg-green-500/10 rounded-full">
-                     <CheckCircle2 className="w-12 h-12 text-green-500" />
-                   </div>
-                   <div>
-                     <p className="text-lg font-medium text-white">Conversion Successful</p>
-                     <p className="text-sm text-text-dim">Your high-fidelity Word document is ready.</p>
-                   </div>
+                <div className="bg-black/20 p-6 rounded-xl border border-dashed border-border max-h-[400px] overflow-y-auto">
+                  <div className="text-text-dim leading-relaxed text-sm whitespace-pre-wrap">
+                    {result.extractedText?.substring(0, 2000)}
+                    {result.extractedText?.length > 2000 && (
+                      <span className="block text-purple-400 text-xs mt-2">... text truncated. Download full content.</span>
+                    )}
+                  </div>
                 </div>
               </div>
 
@@ -200,21 +173,22 @@ export default function DocumentConverter() {
 
         <div className="space-y-6">
           <div className="p-6 bg-surface border border-border rounded-[24px] space-y-6">
-            <h3 className="font-semibold text-lg">AI Pro Actions</h3>
+            <h3 className="font-semibold text-lg">Gemini AI Pro</h3>
             
             <div className="space-y-2">
               <div className="p-3 rounded-xl border border-purple-500 bg-purple-500/5">
-                <div className="font-bold text-sm">Adobe PDF Services</div>
-                <div className="text-[10px] opacity-70">Official high-fidelity DOCX conversion</div>
+                <div className="font-bold text-sm">Intelligent Text Extraction</div>
+                <div className="text-[10px] opacity-70">Extracts all readable text from PDFs</div>
               </div>
-              <div className="p-3 rounded-xl border border-border bg-white/5 opacity-50">
-                <div className="font-bold text-sm">Gemini Analysis</div>
-                <div className="text-[10px] opacity-70">Provides intelligent document summary</div>
+              <div className="p-3 rounded-xl border border-purple-500 bg-purple-500/5">
+                <div className="font-bold text-sm">AI-Powered Summaries</div>
+                <div className="text-[10px] opacity-70">Provides concise document summaries</div>
               </div>
             </div>
 
             <p className="text-xs text-text-dim leading-relaxed">
-              Adobe PDF Services will convert your PDF into a native Word file, preserving all formatting, images and tables perfectly. Gemini AI provides a high-level summary.
+              Google Gemini AI processes your PDF to extract all text content and generate an intelligent summary. 
+              Perfect for research, note-taking, and document analysis.
             </p>
 
             <button
@@ -226,10 +200,10 @@ export default function DocumentConverter() {
               {processing ? (
                 <>
                   <Loader2 className="w-5 h-5 animate-spin" />
-                  Processing...
+                  Processing with Gemini...
                 </>
               ) : (
-                <>Start Pro Conversion</>
+                <>Extract Text & Summarize</>
               )}
             </button>
 
@@ -238,7 +212,7 @@ export default function DocumentConverter() {
                 onClick={() => {setResult(null); setFile(null);}}
                 className="w-full py-4 bg-white/5 text-white font-bold rounded-xl hover:bg-white/10 transition-colors"
               >
-                Start New
+                Process Another Document
               </button>
             )}
 
