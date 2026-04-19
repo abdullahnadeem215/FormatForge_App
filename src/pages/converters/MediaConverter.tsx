@@ -18,11 +18,8 @@ import { cn } from '../../lib/utils';
 
 type ConversionType = 'audio-to-audio' | 'video-to-audio';
 
-// Output format (only WAV for maximum compatibility)
-const OUTPUT_FORMAT = { value: 'wav', label: 'WAV', mime: 'audio/wav', extension: '.wav' };
-
 export default function MediaConverter() {
-  const [conversionType] = useState<ConversionType>(
+  const [conversionType, setConversionType] = useState<ConversionType>(
     window.location.pathname.includes('video') ? 'video-to-audio' : 'audio-to-audio'
   );
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
@@ -39,22 +36,18 @@ export default function MediaConverter() {
     }
   };
 
-  // Save to device using Capacitor Filesystem
   const saveToDevice = async (blob: Blob, fileName: string) => {
     try {
       const reader = new FileReader();
       reader.readAsDataURL(blob);
       reader.onloadend = async () => {
         const base64 = (reader.result as string).split(',')[1];
-        
         await Filesystem.writeFile({
           path: fileName,
           data: base64,
           directory: Directory.Documents
         });
-        
         alert(`✅ Saved to Documents/${fileName}`);
-        
         await Share.share({
           title: 'File Converted',
           text: 'Check out my converted file!',
@@ -67,41 +60,20 @@ export default function MediaConverter() {
     }
   };
 
-  // Convert audio using Web Audio API (instant, no engine!)
-  const convertToWav = async (file: File): Promise<Blob> => {
-    return new Promise(async (resolve, reject) => {
-      try {
-        const audioContext = new (window.AudioContext || (window as any).webkitAudioContext)();
-        
-        const arrayBuffer = await file.arrayBuffer();
-        const audioBuffer = await audioContext.decodeAudioData(arrayBuffer);
-        
-        // Convert AudioBuffer to WAV
-        const wavBlob = audioBufferToWav(audioBuffer);
-        
-        await audioContext.close();
-        resolve(wavBlob);
-        
-      } catch (err) {
-        reject(new Error('Could not process audio. Try a different file format.'));
-      }
-    });
-  };
-
-  // Convert AudioBuffer to WAV format
+  // Convert audio buffer to WAV WITHOUT changing sample rate
   const audioBufferToWav = (buffer: AudioBuffer): Blob => {
     const numChannels = buffer.numberOfChannels;
-    const sampleRate = buffer.sampleRate;
+    const sampleRate = buffer.sampleRate; // CRITICAL: Keep original sample rate
     const format = 1; // PCM
     const bitDepth = 16;
     
-    const samples = buffer.getChannelData(0);
+    // Get interleaved samples
+    const samples = interleaveSamples(buffer);
     const dataLength = samples.length * (bitDepth / 8);
     const bufferLength = 44 + dataLength;
     const arrayBuffer = new ArrayBuffer(bufferLength);
     const view = new DataView(arrayBuffer);
     
-    // Write WAV header
     writeString(view, 0, 'RIFF');
     view.setUint32(4, bufferLength - 8, true);
     writeString(view, 8, 'WAVE');
@@ -116,7 +88,6 @@ export default function MediaConverter() {
     writeString(view, 36, 'data');
     view.setUint32(40, dataLength, true);
     
-    // Write samples
     let offset = 44;
     for (let i = 0; i < samples.length; i++) {
       const sample = Math.max(-1, Math.min(1, samples[i]));
@@ -127,10 +98,105 @@ export default function MediaConverter() {
     return new Blob([view], { type: 'audio/wav' });
   };
 
+  const interleaveSamples = (buffer: AudioBuffer): Float32Array => {
+    const channels = buffer.numberOfChannels;
+    const length = buffer.length;
+    const result = new Float32Array(length * channels);
+    
+    for (let channel = 0; channel < channels; channel++) {
+      const channelData = buffer.getChannelData(channel);
+      for (let i = 0; i < length; i++) {
+        result[i * channels + channel] = channelData[i];
+      }
+    }
+    return result;
+  };
+
   const writeString = (view: DataView, offset: number, str: string) => {
     for (let i = 0; i < str.length; i++) {
       view.setUint8(offset + i, str.charCodeAt(i));
     }
+  };
+
+  // For audio files: Direct conversion preserving quality
+  const convertAudioFile = async (file: File): Promise<Blob> => {
+    return new Promise(async (resolve, reject) => {
+      try {
+        const audioContext = new (window.AudioContext || (window as any).webkitAudioContext)();
+        const arrayBuffer = await file.arrayBuffer();
+        const audioBuffer = await audioContext.decodeAudioData(arrayBuffer);
+        
+        // Preserve original sample rate
+        const wavBlob = audioBufferToWav(audioBuffer);
+        await audioContext.close();
+        resolve(wavBlob);
+        
+      } catch (err) {
+        reject(new Error('Could not convert audio file.'));
+      }
+    });
+  };
+
+  // For video files: Extract audio WITHOUT changing pitch
+  const extractAudioFromVideo = async (file: File): Promise<Blob> => {
+    return new Promise(async (resolve, reject) => {
+      try {
+        const video = document.createElement('video');
+        const objectUrl = URL.createObjectURL(file);
+        video.src = objectUrl;
+        
+        video.onloadedmetadata = async () => {
+          try {
+            // Create audio context
+            const audioContext = new (window.AudioContext || (window as any).webkitAudioContext)();
+            
+            // Create media element source
+            const source = audioContext.createMediaElementSource(video);
+            const destination = audioContext.createMediaStreamDestination();
+            source.connect(destination);
+            
+            // Create media recorder
+            const mediaRecorder = new MediaRecorder(destination.stream);
+            const chunks: BlobPart[] = [];
+            
+            mediaRecorder.ondataavailable = (e) => {
+              if (e.data.size > 0) {
+                chunks.push(e.data);
+              }
+            };
+            
+            mediaRecorder.onstop = () => {
+              const blob = new Blob(chunks, { type: 'audio/wav' });
+              URL.revokeObjectURL(objectUrl);
+              resolve(blob);
+            };
+            
+            mediaRecorder.start();
+            video.play();
+            
+            // Stop after video duration
+            setTimeout(() => {
+              mediaRecorder.stop();
+              video.pause();
+              source.disconnect();
+              audioContext.close();
+            }, (video.duration + 0.5) * 1000);
+            
+          } catch (err) {
+            URL.revokeObjectURL(objectUrl);
+            reject(err);
+          }
+        };
+        
+        video.onerror = () => {
+          URL.revokeObjectURL(objectUrl);
+          reject(new Error('Failed to load video'));
+        };
+        
+      } catch (err) {
+        reject(new Error('Could not extract audio from video.'));
+      }
+    });
   };
 
   const handleConvert = async () => {
@@ -141,20 +207,22 @@ export default function MediaConverter() {
     setError(null);
     
     try {
-      // Simulate progress for better UX
       const progressInterval = setInterval(() => {
         setConversionProgress(prev => Math.min(prev + 10, 90));
       }, 200);
       
       let blob: Blob;
       let outputFileName: string;
+      const fileExt = selectedFile.name.split('.').pop()?.toLowerCase() || '';
+      const isAudioFile = ['mp3', 'wav', 'ogg', 'm4a', 'flac', 'aac'].includes(fileExt);
       
-      if (conversionType === 'audio-to-audio') {
-        blob = await convertToWav(selectedFile);
+      if (isAudioFile) {
+        // Audio to audio conversion
+        blob = await convertAudioFile(selectedFile);
         outputFileName = selectedFile.name.substring(0, selectedFile.name.lastIndexOf('.')) + '.wav';
       } else {
-        // For video, extract audio using same method
-        blob = await convertToWav(selectedFile);
+        // Video to audio extraction
+        blob = await extractAudioFromVideo(selectedFile);
         outputFileName = selectedFile.name.substring(0, selectedFile.name.lastIndexOf('.')) + '_audio.wav';
       }
       
@@ -164,10 +232,9 @@ export default function MediaConverter() {
       const url = URL.createObjectURL(blob);
       setResult({ name: outputFileName, url, blob });
       
-      // Save to history locally
       saveConversion({
-        type: conversionType === 'audio-to-audio' ? 'audio' : 'video',
-        input_format: selectedFile.name.split('.').pop() || '',
+        type: isAudioFile ? 'audio' : 'video',
+        input_format: fileExt,
         output_format: 'wav',
         input_size: selectedFile.size,
         output_size: blob.size,
@@ -175,7 +242,6 @@ export default function MediaConverter() {
         file_name: outputFileName
       }, blob);
       
-      // Save to device
       await saveToDevice(blob, outputFileName);
       
     } catch (err) {
@@ -199,17 +265,36 @@ export default function MediaConverter() {
         </div>
         <h2 className="text-4xl font-extrabold tracking-tight">Media Master</h2>
         <p className="text-text-dim text-sm max-w-lg mx-auto">
-          Pure browser-based audio conversion.
+          Convert audio files or extract audio from videos. Preserves original pitch and quality.
         </p>
       </header>
 
+      {/* Conversion Type Toggle */}
+      <div className="flex p-1 bg-surface border border-border rounded-2xl max-w-md mx-auto">
+        <button
+          onClick={() => {setConversionType('audio-to-audio'); setSelectedFile(null); setResult(null);}}
+          className={cn(
+            "flex-1 py-3 rounded-xl text-sm font-bold transition-all",
+            conversionType === 'audio-to-audio' ? "bg-accent-grad text-white shadow-lg" : "text-text-dim hover:text-white"
+          )}
+        >
+          🎵 Audio to WAV
+        </button>
+        <button
+          onClick={() => {setConversionType('video-to-audio'); setSelectedFile(null); setResult(null);}}
+          className={cn(
+            "flex-1 py-3 rounded-xl text-sm font-bold transition-all",
+            conversionType === 'video-to-audio' ? "bg-accent-grad text-white shadow-lg" : "text-text-dim hover:text-white"
+          )}
+        >
+          🎬 Video to Audio
+        </button>
+      </div>
+
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
         <div className="lg:col-span-8 space-y-6">
-          {/* Drop Zone */}
           {!selectedFile ? (
-            <label 
-              className="block border-2 border-dashed border-border rounded-[32px] p-16 text-center hover:border-purple-500 transition-all bg-surface cursor-pointer group"
-            >
+            <label className="block border-2 border-dashed border-border rounded-[32px] p-16 text-center hover:border-purple-500 transition-all bg-surface cursor-pointer group">
               <input type="file" onChange={onFileSelect} className="hidden" 
                 accept={conversionType === 'audio-to-audio' ? 'audio/*' : 'video/*'} 
               />
@@ -222,18 +307,17 @@ export default function MediaConverter() {
                   )}
                 </div>
                 <div>
-                  <h3 className="text-xl font-bold">Select {conversionType === 'audio-to-audio' ? 'Audio' : 'Video'} source</h3>
+                  <h3 className="text-xl font-bold">Select {conversionType === 'audio-to-audio' ? 'Audio' : 'Video'} file</h3>
                   <p className="text-sm text-text-dim mt-2">
                     {conversionType === 'audio-to-audio' 
-                      ? 'MP3, WAV, OGG, M4A, FLAC - converts to WAV'
-                      : 'Extract audio from MP4, WebM, MOV, AVI'}
+                      ? 'MP3, WAV, OGG, M4A, FLAC, AAC → WAV (original pitch)'
+                      : 'MP4, WebM, MOV, AVI → Extract audio as WAV (no pitch change)'}
                   </p>
                 </div>
               </div>
             </label>
           ) : (
             <div className="space-y-6">
-              {/* Selected File Card */}
               <div className="p-6 bg-surface border border-border rounded-[24px] flex items-center justify-between">
                 <div className="flex items-center gap-4">
                   <div className="p-3 bg-white/5 rounded-xl">
@@ -241,7 +325,7 @@ export default function MediaConverter() {
                   </div>
                   <div>
                     <h4 className="font-bold text-sm truncate max-w-[200px]">{selectedFile.name}</h4>
-                    <p className="text-[10px] text-text-dim uppercase tracking-widest">{(selectedFile.size / 1024 / 1024).toFixed(2)} MB • READY</p>
+                    <p className="text-[10px] text-text-dim uppercase tracking-widest">{(selectedFile.size / 1024 / 1024).toFixed(2)} MB</p>
                   </div>
                 </div>
                 {!isConverting && !result && (
@@ -251,14 +335,9 @@ export default function MediaConverter() {
                 )}
               </div>
 
-              {/* Status or Result */}
               <AnimatePresence>
                 {isConverting && (
-                  <motion.div 
-                    initial={{ opacity: 0, y: 10 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    className="p-8 bg-purple-500/5 border border-purple-500/20 rounded-[24px] space-y-6 text-center"
-                  >
+                  <motion.div className="p-8 bg-purple-500/5 border border-purple-500/20 rounded-[24px] space-y-6 text-center">
                     <div className="relative w-20 h-20 mx-auto">
                       <svg className="w-full h-full transform -rotate-90">
                         <circle cx="40" cy="40" r="36" fill="none" stroke="currentColor" strokeWidth="4" className="text-white/5" />
@@ -280,11 +359,7 @@ export default function MediaConverter() {
                 )}
 
                 {result && (
-                  <motion.div 
-                    initial={{ opacity: 0, y: 10 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    className="p-8 bg-green-500/5 border border-green-500/20 rounded-[24px] space-y-6"
-                  >
+                  <motion.div className="p-8 bg-green-500/5 border border-green-500/20 rounded-[24px] space-y-6">
                     <div className="flex items-center justify-between">
                       <div className="flex items-center gap-3">
                         <CheckCircle2 className="w-6 h-6 text-green-500" />
@@ -309,7 +384,6 @@ export default function MediaConverter() {
           )}
         </div>
 
-        {/* Settings Sidebar */}
         <div className="lg:col-span-4 space-y-6">
           <div className="p-6 bg-surface border border-border rounded-[24px] space-y-6 sticky top-8">
             <h3 className="font-bold text-lg flex items-center gap-2">
@@ -320,10 +394,10 @@ export default function MediaConverter() {
             <div>
               <label className="text-[10px] font-bold uppercase tracking-[0.2em] text-text-dim mb-3 block">Output Format</label>
               <div className="text-sm text-text-dim p-3 bg-white/5 rounded-xl text-center">
-                WAV (High Quality, Universal)
+                WAV (Original Quality, Original Pitch)
               </div>
               <p className="text-[10px] text-text-dim mt-2 text-center">
-                Converts to WAV format 
+                Preserves original sample rate - no pitch change
               </p>
             </div>
 
@@ -332,7 +406,7 @@ export default function MediaConverter() {
               onClick={handleConvert}
               className="w-full py-4 bg-accent-grad text-white font-bold rounded-xl shadow-lg shadow-purple-500/20 hover:scale-[1.02] active:scale-[0.98] transition-all disabled:opacity-30 disabled:hover:scale-100 disabled:cursor-not-allowed"
             >
-              {isConverting ? 'Converting...' : 'Convert to WAV'}
+              {isConverting ? 'Converting...' : (conversionType === 'audio-to-audio' ? 'Convert to WAV' : 'Extract Audio')}
             </button>
 
             {error && (
