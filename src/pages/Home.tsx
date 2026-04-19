@@ -87,7 +87,7 @@ export default function Home() {
             >
               {converter.isAI ? (
                 <span className="absolute top-6 right-6 px-2.5 py-1 bg-purple-500/10 border border-purple-500/20 rounded-md text-[10px] font-bold text-purple-400 uppercase tracking-wider">
-                  Get Summary & Docx 
+                  PDF-TO-DOCX
                 </span>
               ) : (
                 <span className="absolute top-6 right-6 px-2.5 py-1 bg-text-dim/5 border border-text-dim/20 rounded-md text-[10px] font-bold text-text-dim uppercase tracking-wider">
