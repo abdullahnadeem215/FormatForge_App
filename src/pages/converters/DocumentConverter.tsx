@@ -16,6 +16,7 @@ export default function DocumentConverter() {
   const [result, setResult] = useState<any | null>(null);
   const [summary, setSummary] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [timeoutError, setTimeoutError] = useState(false);
 
   const onDrop = useCallback((acceptedFiles: File[]) => {
     setFile(acceptedFiles[0]);
@@ -60,16 +61,31 @@ export default function DocumentConverter() {
     setError(null);
     setResult(null);
     setSummary(null);
+    setTimeoutError(false);
+
+    // Check file size - warn if too large
+    if (file.size > 5 * 1024 * 1024) {
+      setError('File is larger than 5MB. Conversion may take longer.');
+    }
 
     try {
       const formData = new FormData();
       formData.append('files', file);
 
-      // Call Gotenberg API for PDF to Word conversion
+      // Create AbortController with 60 second timeout for large files
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => {
+        controller.abort();
+        setTimeoutError(true);
+      }, 60000); // 60 seconds timeout
+
       const response = await fetch(`${GOTENBERG_API_URL}/forms/libreoffice/convert`, {
         method: 'POST',
         body: formData,
+        signal: controller.signal,
       });
+
+      clearTimeout(timeoutId);
 
       if (!response.ok) {
         const errorText = await response.text();
@@ -86,7 +102,7 @@ export default function DocumentConverter() {
       };
 
       setResult(conversionResult);
-      setSummary("PDF converted to Word successfully using Gotenberg (lightweight, fast)");
+      setSummary("PDF converted to Word successfully!");
 
       // Save to history locally
       saveConversion({
@@ -103,8 +119,15 @@ export default function DocumentConverter() {
       await saveToDevice(docxBlob, conversionResult.name);
 
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Processing failed. Ensure Gotenberg is running.');
-      console.error(err);
+      console.error('Conversion error:', err);
+      
+      if (err.name === 'AbortError' || timeoutError) {
+        setError('Conversion timed out. The file may be too large. Try a smaller PDF (under 5MB).');
+      } else if (err.message.includes('Failed to fetch')) {
+        setError('Network error. Please check your internet connection and try again.');
+      } else {
+        setError(err instanceof Error ? err.message : 'Processing failed. Please try again.');
+      }
     } finally {
       setProcessing(false);
     }
@@ -154,7 +177,7 @@ export default function DocumentConverter() {
                 </div>
                 <div>
                   <p className="text-lg font-medium">Upload a PDF document</p>
-                  <p className="text-sm text-text-dim">Converts to editable Word format</p>
+                  <p className="text-sm text-text-dim">Converts to editable Word format (Max 5MB recommended)</p>
                 </div>
               </div>
             </div>
@@ -198,6 +221,9 @@ export default function DocumentConverter() {
               <div className="flex items-center gap-3">
                 <FileText className="w-5 h-5 text-purple-400" />
                 <span className="text-sm font-medium truncate max-w-[200px]">{file.name}</span>
+                <span className="text-[10px] text-text-dim">
+                  {(file.size / 1024 / 1024).toFixed(2)} MB
+                </span>
               </div>
               <button onClick={() => setFile(null)} className="p-1 hover:bg-white/10 rounded-lg transition-colors">
                 <X className="w-4 h-4 text-gray-400" />
@@ -226,7 +252,7 @@ export default function DocumentConverter() {
             </div>
 
             <p className="text-xs text-text-dim leading-relaxed">
-              PDF-FORGE converts your PDF to Word.
+              PDF-FORGE converts your PDF to Word. Large files may take 30-60 seconds.
             </p>
 
             <button
@@ -238,7 +264,7 @@ export default function DocumentConverter() {
               {processing ? (
                 <>
                   <Loader2 className="w-5 h-5 animate-spin" />
-                  Converting with PDF-FORGE...
+                  Converting (may take up to 60 seconds)...
                 </>
               ) : (
                 <>Convert to Word</>
