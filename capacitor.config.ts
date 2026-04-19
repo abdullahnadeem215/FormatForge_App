@@ -6,7 +6,7 @@ const config: CapacitorConfig = {
   webDir: 'dist',
   server: {
     cleartext: true,
-    allowNavigation: ['https://pdf-services-aopu.onrender.com']
+    allowNavigation: ['http://localhost:8080']
   },
   plugins: {
     SplashScreen: {
