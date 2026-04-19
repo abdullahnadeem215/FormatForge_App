@@ -2,9 +2,15 @@ import React, { useState, useCallback } from 'react';
 import { useDropzone } from 'react-dropzone';
 import { motion } from 'motion/react';
 import { File, X, CheckCircle2, AlertCircle, Download, Loader2, FileText, Zap } from 'lucide-react';
-import { summarizePdf } from '../../services/gemini';
 import { saveConversion } from '../../utils/storage';
 import { cn } from '../../lib/utils';
+import { Filesystem, Directory } from '@capacitor/filesystem';
+import { Share } from '@capacitor/share';
+
+// Stirling-PDF API endpoint - change this to your server URL
+// For local development: http://localhost:8080
+// For mobile testing on same WiFi: http://YOUR_COMPUTER_IP:8080
+const STIRLING_API_URL = 'http://localhost:8080';
 
 export default function DocumentConverter() {
   const [file, setFile] = useState<File | null>(null);
@@ -23,6 +29,33 @@ export default function DocumentConverter() {
     multiple: false
   } as any);
 
+  const saveToDevice = async (blob: Blob, fileName: string) => {
+    try {
+      const reader = new FileReader();
+      reader.readAsDataURL(blob);
+      reader.onloadend = async () => {
+        const base64 = (reader.result as string).split(',')[1];
+        
+        await Filesystem.writeFile({
+          path: fileName,
+          data: base64,
+          directory: Directory.Documents
+        });
+        
+        alert(`✅ Saved to Documents/${fileName}`);
+        
+        await Share.share({
+          title: 'File Converted',
+          text: 'Check out my converted file!',
+          url: `file://${fileName}`
+        });
+      };
+    } catch (error) {
+      console.error('Save error:', error);
+      alert('Failed to save file. Please check storage permissions.');
+    }
+  };
+
   const handleDocumentProcess = async () => {
     if (!file) return;
     setProcessing(true);
@@ -31,39 +64,48 @@ export default function DocumentConverter() {
     setSummary(null);
 
     try {
-      const reader = new FileReader();
-      const base64Promise = new Promise<string>((resolve) => {
-        reader.onload = () => {
-          const base64 = (reader.result as string).split(',')[1];
-          resolve(base64);
-        };
+      const formData = new FormData();
+      formData.append('fileInput', file);
+
+      // Call Stirling-PDF API for PDF to Word conversion
+      const response = await fetch(`${STIRLING_API_URL}/api/v1/convert/pdf/word`, {
+        method: 'POST',
+        body: formData,
       });
-      reader.readAsDataURL(file);
-      const base64 = await base64Promise;
-      
-      const extractedText = await summarizePdf(base64);
+
+      if (!response.ok) {
+        const errorText = await response.text();
+        throw new Error(`Conversion failed: ${response.status} - ${errorText}`);
+      }
+
+      const docxBlob = await response.blob();
+      const docUrl = URL.createObjectURL(docxBlob);
+      const outputFileName = file.name.substring(0, file.name.lastIndexOf('.')) + '.docx';
 
       const conversionResult = {
-        extractedText,
-        name: file.name.substring(0, file.name.lastIndexOf('.')) + '.txt'
+        docUrl,
+        name: outputFileName
       };
 
       setResult(conversionResult);
-      setSummary(extractedText);
+      setSummary("PDF converted to Word successfully using Stirling-PDF (offline, local processing)");
 
-      const textBlob = new Blob([extractedText], { type: 'text/plain' });
+      // Save to history locally
       saveConversion({
         type: 'document',
         input_format: 'pdf',
-        output_format: 'txt',
+        output_format: 'docx',
         input_size: file.size,
-        output_size: textBlob.size,
+        output_size: docxBlob.size,
         status: 'completed',
         file_name: conversionResult.name
-      }, textBlob);
+      }, docxBlob);
+
+      // Save to device
+      await saveToDevice(docxBlob, conversionResult.name);
 
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Processing failed. Ensure the file is valid.');
+      setError(err instanceof Error ? err.message : 'Processing failed. Ensure Stirling-PDF is running at ' + STIRLING_API_URL);
       console.error(err);
     } finally {
       setProcessing(false);
@@ -71,14 +113,11 @@ export default function DocumentConverter() {
   };
 
   const downloadResult = () => {
-    if (!result?.extractedText) return;
-    const blob = new Blob([result.extractedText], { type: 'text/plain' });
-    const url = URL.createObjectURL(blob);
+    if (!result?.docUrl) return;
     const a = document.createElement('a');
-    a.href = url;
-    a.download = result.name || 'extracted_text.txt';
+    a.href = result.docUrl;
+    a.download = result.name || 'document.docx';
     a.click();
-    URL.revokeObjectURL(url);
   };
 
   return (
@@ -91,12 +130,12 @@ export default function DocumentConverter() {
     >
       <header className="space-y-2">
         <div className="flex items-center gap-2">
-          <h2 className="text-3xl font-light tracking-tight">Document Pro</h2>
+          <h2 className="text-3xl font-light tracking-tight">PDF FORGE</h2>
           <span className="px-2.5 py-1 bg-purple-500/10 border border-purple-500/20 rounded-md text-[10px] font-bold text-purple-400 uppercase tracking-wider">
-            AI Summary
+            Stirling-PDF
           </span>
         </div>
-        <p className="text-text-dim text-sm">Extract text and get intelligent summaries from your PDF documents AI.</p>
+        <p className="text-text-dim text-sm">Convert PDF to Word using PDF-FORGE. 100% offline, no API keys, no usage limits.</p>
       </header>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
@@ -117,7 +156,7 @@ export default function DocumentConverter() {
                 </div>
                 <div>
                   <p className="text-lg font-medium">Upload a PDF document</p>
-                  <p className="text-sm text-text-dim">AI will extract text and provide a summary</p>
+                  <p className="text-sm text-text-dim">Converts to editable Word format locally</p>
                 </div>
               </div>
             </div>
@@ -125,19 +164,20 @@ export default function DocumentConverter() {
             <div className="space-y-6">
               <div className="p-8 bg-surface border border-border rounded-[24px] space-y-6">
                 <div className="flex items-center justify-between">
-                  <h3 className="text-xl font-semibold">Text Extracted</h3>
+                  <h3 className="text-xl font-semibold">Document Ready</h3>
                   <button onClick={downloadResult} className="flex items-center gap-2 text-sm font-bold text-purple-400 hover:text-purple-300 transition-colors">
-                    <Download className="w-4 h-4" /> Download TXT
+                    <Download className="w-4 h-4" /> Download DOCX
                   </button>
                 </div>
 
-                <div className="bg-black/20 p-6 rounded-xl border border-dashed border-border max-h-[400px] overflow-y-auto">
-                  <div className="text-text-dim leading-relaxed text-sm whitespace-pre-wrap">
-                    {result.extractedText?.substring(0, 2000)}
-                    {result.extractedText?.length > 2000 && (
-                      <span className="block text-purple-400 text-xs mt-2">... text truncated. Download full content.</span>
-                    )}
-                  </div>
+                <div className="bg-black/20 p-12 rounded-xl border border-dashed border-border flex flex-col items-center justify-center text-center gap-4">
+                   <div className="p-4 bg-green-500/10 rounded-full">
+                     <CheckCircle2 className="w-12 h-12 text-green-500" />
+                   </div>
+                   <div>
+                     <p className="text-lg font-medium text-white">Conversion Successful</p>
+                     <p className="text-sm text-text-dim">Your editable Word document is ready.</p>
+                   </div>
                 </div>
               </div>
 
@@ -145,7 +185,7 @@ export default function DocumentConverter() {
                 <div className="p-8 bg-purple-500/5 border border-purple-500/20 rounded-[24px] space-y-4">
                   <h3 className="text-lg font-semibold flex items-center gap-2">
                     <Zap className="w-5 h-5 text-purple-400" />
-                    AI Summary
+                    Status
                   </h3>
                   <div className="text-text-dim leading-relaxed text-sm whitespace-pre-line">
                     {summary}
@@ -170,22 +210,25 @@ export default function DocumentConverter() {
 
         <div className="space-y-6">
           <div className="p-6 bg-surface border border-border rounded-[24px] space-y-6">
-            <h3 className="font-semibold text-lg">AI Summary</h3>
+            <h3 className="font-semibold text-lg">PDF-FORGE</h3>
             
             <div className="space-y-2">
               <div className="p-3 rounded-xl border border-purple-500 bg-purple-500/5">
-                <div className="font-bold text-sm">Intelligent Text Extraction</div>
-                <div className="text-[10px] opacity-70">Extracts all readable text from PDFs</div>
+                <div className="font-bold text-sm">100% Offline Processing</div>
+                <div className="text-[10px] opacity-70">No internet required after setup</div>
               </div>
               <div className="p-3 rounded-xl border border-purple-500 bg-purple-500/5">
-                <div className="font-bold text-sm">AI-Powered Summaries</div>
-                <div className="text-[10px] opacity-70">Provides concise document summaries</div>
+                <div className="font-bold text-sm">No API Keys</div>
+                <div className="text-[10px] opacity-70">Completely free, no usage limits</div>
+              </div>
+              <div className="p-3 rounded-xl border border-purple-500 bg-purple-500/5">
+                <div className="font-bold text-sm">Preserves Formatting</div>
+                <div className="text-[10px] opacity-70">Tables, images, fonts retained</div>
               </div>
             </div>
 
             <p className="text-xs text-text-dim leading-relaxed">
-              AI processes your PDF to extract all text content and generate an intelligent summary. 
-              Perfect for research, note-taking, and document analysis.
+              PDF-FORGE runs locally on your computer. All PDF processing happens offline—your files never leave your network.
             </p>
 
             <button
@@ -197,10 +240,10 @@ export default function DocumentConverter() {
               {processing ? (
                 <>
                   <Loader2 className="w-5 h-5 animate-spin" />
-                  Processing with AI...
+                  Converting with PDF-FORGE...
                 </>
               ) : (
-                <>Extract Text & Summarize</>
+                <>Convert to Word</>
               )}
             </button>
 
@@ -209,7 +252,7 @@ export default function DocumentConverter() {
                 onClick={() => {setResult(null); setFile(null);}}
                 className="w-full py-4 bg-white/5 text-white font-bold rounded-xl hover:bg-white/10 transition-colors"
               >
-                Process Another Document
+                Convert Another Document
               </button>
             )}
 
