@@ -8,7 +8,7 @@ import { Filesystem, Directory } from '@capacitor/filesystem';
 import { Share } from '@capacitor/share';
 
 // Your Gotenberg endpoint (deployed on Render)
-const GOTENBERG_API_URL = 'https://stirling-pdf-cloud-1.onrender.com';
+const GOTENBERG_API_URL = 'https://gotenberg-pdf.fly.dev';
 
 export default function DocumentConverter() {
   const [file, setFile] = useState<File | null>(null);
