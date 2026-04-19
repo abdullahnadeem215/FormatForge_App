@@ -8,7 +8,7 @@ import { Filesystem, Directory } from '@capacitor/filesystem';
 import { Share } from '@capacitor/share';
 
 // Gotenberg API endpoint - change this to your Render URL
-const GOTENBERG_API_URL = 'https://gotenberg-pdf.onrender.com';
+const GOTENBERG_API_URL = 'https://stirling-pdf-cloud-1.onrender.com';
 
 export default function DocumentConverter() {
   const [file, setFile] = useState<File | null>(null);
@@ -128,9 +128,9 @@ export default function DocumentConverter() {
     >
       <header className="space-y-2">
         <div className="flex items-center gap-2">
-          <h2 className="text-3xl font-light tracking-tight">PDF-FORGE</h2>
+          <h2 className="text-3xl font-light tracking-tight">Document Pro</h2>
           <span className="px-2.5 py-1 bg-purple-500/10 border border-purple-500/20 rounded-md text-[10px] font-bold text-purple-400 uppercase tracking-wider">
-            Gotenberg PDF
+            PDF-FORGE
           </span>
         </div>
         <p className="text-text-dim text-sm">Convert PDF to Word using PDF-FORGE. Lightweight and fast.</p>
