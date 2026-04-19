@@ -96,10 +96,10 @@ export default function DocumentConverter() {
         <div className="flex items-center gap-2">
           <h2 className="text-3xl font-light tracking-tight">Document Pro</h2>
           <span className="px-2.5 py-1 bg-purple-500/10 border border-purple-500/20 rounded-md text-[10px] font-bold text-purple-400 uppercase tracking-wider">
-            Gemini AI
+            AI Summary
           </span>
         </div>
-        <p className="text-text-dim text-sm">Extract text and get intelligent summaries from your PDF documents using Google Gemini AI.</p>
+        <p className="text-text-dim text-sm">Extract text and get intelligent summaries from your PDF documents using AI.</p>
       </header>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
@@ -120,7 +120,7 @@ export default function DocumentConverter() {
                 </div>
                 <div>
                   <p className="text-lg font-medium">Upload a PDF document</p>
-                  <p className="text-sm text-text-dim">Gemini AI will extract text and provide a summary</p>
+                  <p className="text-sm text-text-dim">AI will extract text and provide a summary</p>
                 </div>
               </div>
             </div>
@@ -148,7 +148,7 @@ export default function DocumentConverter() {
                 <div className="p-8 bg-purple-500/5 border border-purple-500/20 rounded-[24px] space-y-4">
                   <h3 className="text-lg font-semibold flex items-center gap-2">
                     <Zap className="w-5 h-5 text-purple-400" />
-                    Gemini AI Summary
+                    AI Summary
                   </h3>
                   <div className="text-text-dim leading-relaxed text-sm whitespace-pre-line">
                     {summary}
@@ -173,7 +173,7 @@ export default function DocumentConverter() {
 
         <div className="space-y-6">
           <div className="p-6 bg-surface border border-border rounded-[24px] space-y-6">
-            <h3 className="font-semibold text-lg">Gemini AI Pro</h3>
+            <h3 className="font-semibold text-lg">AI Summary</h3>
             
             <div className="space-y-2">
               <div className="p-3 rounded-xl border border-purple-500 bg-purple-500/5">
@@ -187,7 +187,7 @@ export default function DocumentConverter() {
             </div>
 
             <p className="text-xs text-text-dim leading-relaxed">
-              Google Gemini AI processes your PDF to extract all text content and generate an intelligent summary. 
+              AI processes your PDF to extract all text content and generate an intelligent summary. 
               Perfect for research, note-taking, and document analysis.
             </p>
 
@@ -200,7 +200,7 @@ export default function DocumentConverter() {
               {processing ? (
                 <>
                   <Loader2 className="w-5 h-5 animate-spin" />
-                  Processing with Gemini...
+                  Processing with AI...
                 </>
               ) : (
                 <>Extract Text & Summarize</>
