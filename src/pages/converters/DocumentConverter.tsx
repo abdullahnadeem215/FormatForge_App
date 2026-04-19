@@ -7,7 +7,7 @@ import { cn } from '../../lib/utils';
 import { Filesystem, Directory } from '@capacitor/filesystem';
 import { Share } from '@capacitor/share';
 
-// Gotenberg API endpoint - change this to your Render URL
+// Your Gotenberg endpoint (deployed on Render)
 const GOTENBERG_API_URL = 'https://stirling-pdf-cloud-1.onrender.com';
 
 export default function DocumentConverter() {
@@ -16,7 +16,6 @@ export default function DocumentConverter() {
   const [result, setResult] = useState<any | null>(null);
   const [summary, setSummary] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [timeoutError, setTimeoutError] = useState(false);
 
   const onDrop = useCallback((acceptedFiles: File[]) => {
     setFile(acceptedFiles[0]);
@@ -61,23 +60,17 @@ export default function DocumentConverter() {
     setError(null);
     setResult(null);
     setSummary(null);
-    setTimeoutError(false);
 
-    // Check file size - warn if too large
-    if (file.size > 5 * 1024 * 1024) {
-      setError('File is larger than 5MB. Conversion may take longer.');
-    }
-
+    // Show loading message for large files
+    const isLargeFile = file.size > 2 * 1024 * 1024;
+    
     try {
       const formData = new FormData();
       formData.append('files', file);
 
-      // Create AbortController with 60 second timeout for large files
+      // Create AbortController with 90 second timeout (Render free tier allows this)
       const controller = new AbortController();
-      const timeoutId = setTimeout(() => {
-        controller.abort();
-        setTimeoutError(true);
-      }, 60000); // 60 seconds timeout
+      const timeoutId = setTimeout(() => controller.abort(), 120000); // 90 seconds timeout
 
       const response = await fetch(`${GOTENBERG_API_URL}/forms/libreoffice/convert`, {
         method: 'POST',
@@ -89,7 +82,7 @@ export default function DocumentConverter() {
 
       if (!response.ok) {
         const errorText = await response.text();
-        throw new Error(`Conversion failed: ${response.status} - ${errorText}`);
+        throw new Error(`Conversion failed: ${response.status}`);
       }
 
       const docxBlob = await response.blob();
@@ -104,7 +97,6 @@ export default function DocumentConverter() {
       setResult(conversionResult);
       setSummary("PDF converted to Word successfully!");
 
-      // Save to history locally
       saveConversion({
         type: 'document',
         input_format: 'pdf',
@@ -115,16 +107,15 @@ export default function DocumentConverter() {
         file_name: conversionResult.name
       }, docxBlob);
 
-      // Save to device
       await saveToDevice(docxBlob, conversionResult.name);
 
     } catch (err) {
       console.error('Conversion error:', err);
       
-      if (err.name === 'AbortError' || timeoutError) {
-        setError('Conversion timed out. The file may be too large. Try a smaller PDF (under 5MB).');
+      if (err.name === 'AbortError') {
+        setError('Conversion timed out after 90 seconds. The file may be too complex. Try a different PDF.');
       } else if (err.message.includes('Failed to fetch')) {
-        setError('Network error. Please check your internet connection and try again.');
+        setError('Cannot reach conversion server. Please check your internet connection.');
       } else {
         setError(err instanceof Error ? err.message : 'Processing failed. Please try again.');
       }
@@ -153,10 +144,10 @@ export default function DocumentConverter() {
         <div className="flex items-center gap-2">
           <h2 className="text-3xl font-light tracking-tight">Document Pro</h2>
           <span className="px-2.5 py-1 bg-purple-500/10 border border-purple-500/20 rounded-md text-[10px] font-bold text-purple-400 uppercase tracking-wider">
-            PDF-FORGE
+            PDF Converter
           </span>
         </div>
-        <p className="text-text-dim text-sm">Convert PDF to Word using PDF-FORGE. Lightweight and fast.</p>
+        <p className="text-text-dim text-sm">Convert PDF to Word format.</p>
       </header>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
@@ -177,7 +168,7 @@ export default function DocumentConverter() {
                 </div>
                 <div>
                   <p className="text-lg font-medium">Upload a PDF document</p>
-                  <p className="text-sm text-text-dim">Converts to editable Word format (Max 5MB recommended)</p>
+                  <p className="text-sm text-text-dim">Converts to editable Word format</p>
                 </div>
               </div>
             </div>
@@ -197,22 +188,10 @@ export default function DocumentConverter() {
                    </div>
                    <div>
                      <p className="text-lg font-medium text-white">Conversion Successful</p>
-                     <p className="text-sm text-text-dim">Your editable Word document is ready.</p>
+                     <p className="text-sm text-text-dim">Your Word document is ready.</p>
                    </div>
                 </div>
               </div>
-
-              {summary && (
-                <div className="p-8 bg-purple-500/5 border border-purple-500/20 rounded-[24px] space-y-4">
-                  <h3 className="text-lg font-semibold flex items-center gap-2">
-                    <Zap className="w-5 h-5 text-purple-400" />
-                    Status
-                  </h3>
-                  <div className="text-text-dim leading-relaxed text-sm whitespace-pre-line">
-                    {summary}
-                  </div>
-                </div>
-              )}
             </div>
           )}
 
@@ -221,9 +200,7 @@ export default function DocumentConverter() {
               <div className="flex items-center gap-3">
                 <FileText className="w-5 h-5 text-purple-400" />
                 <span className="text-sm font-medium truncate max-w-[200px]">{file.name}</span>
-                <span className="text-[10px] text-text-dim">
-                  {(file.size / 1024 / 1024).toFixed(2)} MB
-                </span>
+                <span className="text-xs text-text-dim">({(file.size / 1024).toFixed(0)} KB)</span>
               </div>
               <button onClick={() => setFile(null)} className="p-1 hover:bg-white/10 rounded-lg transition-colors">
                 <X className="w-4 h-4 text-gray-400" />
@@ -234,26 +211,18 @@ export default function DocumentConverter() {
 
         <div className="space-y-6">
           <div className="p-6 bg-surface border border-border rounded-[24px] space-y-6">
-            <h3 className="font-semibold text-lg">PDF-FORGE</h3>
+            <h3 className="font-semibold text-lg">PDF Converter</h3>
             
             <div className="space-y-2">
               <div className="p-3 rounded-xl border border-purple-500 bg-purple-500/5">
-                <div className="font-bold text-sm">Lightweight & Fast</div>
-                <div className="text-[10px] opacity-70">Optimized for cloud deployment</div>
-              </div>
-              <div className="p-3 rounded-xl border border-purple-500 bg-purple-500/5">
-                <div className="font-bold text-sm">No Subscription</div>
-                <div className="text-[10px] opacity-70">Completely free, no usage limits</div>
+                <div className="font-bold text-sm">Free & Unlimited</div>
+                <div className="text-[10px] opacity-70">No subscription required</div>
               </div>
               <div className="p-3 rounded-xl border border-purple-500 bg-purple-500/5">
                 <div className="font-bold text-sm">Preserves Formatting</div>
                 <div className="text-[10px] opacity-70">Tables, images, fonts retained</div>
               </div>
             </div>
-
-            <p className="text-xs text-text-dim leading-relaxed">
-              PDF-FORGE converts your PDF to Word. Large files may take 30-60 seconds.
-            </p>
 
             <button
               id="process-document-btn"
@@ -264,7 +233,7 @@ export default function DocumentConverter() {
               {processing ? (
                 <>
                   <Loader2 className="w-5 h-5 animate-spin" />
-                  Converting (may take up to 60 seconds)...
+                  Converting... (up to 90 seconds)
                 </>
               ) : (
                 <>Convert to Word</>
