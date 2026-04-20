@@ -7,10 +7,14 @@ import { cn } from '../../lib/utils';
 import { Filesystem, Directory } from '@capacitor/filesystem';
 import { Share } from '@capacitor/share';
 
-// Your ComPDF API credentials (replace these with your actual keys)
+// ComPDF API configuration - REPLACE WITH YOUR ACTUAL KEYS
 const COMPDF_PUBLIC_KEY = 'public_key_845596ca8f8be8db1ff646ffba18ca40';
 const COMPDF_SECRET_KEY = 'secret_key_d16ca651b03ba3cbb0163e77a6c52052';
+// Use the correct base URL for your region
+// For global users:
 const COMPDF_BASE_URL = 'https://api-server.compdf.com/server/v1';
+// For users in China:
+// const COMPDF_BASE_URL = 'https://api-server.compdf.cn/server/v1';
 
 export default function DocumentConverter() {
   const [file, setFile] = useState<File | null>(null);
@@ -54,19 +58,34 @@ export default function DocumentConverter() {
   };
 
   // Helper function to poll for task completion
-  const pollTaskStatus = async (accessToken: string, taskId: string, maxAttempts = 30, delayMs = 2000): Promise<string> => {
+  const pollTaskStatus = async (accessToken: string, taskId: string, maxAttempts = 60, delayMs = 2000): Promise<string> => {
     for (let i = 0; i < maxAttempts; i++) {
       await new Promise(resolve => setTimeout(resolve, delayMs));
+      
       const statusResponse = await fetch(`${COMPDF_BASE_URL}/task/taskInfo?taskId=${taskId}`, {
         method: 'GET',
         headers: { 'Authorization': `Bearer ${accessToken}` }
       });
+      
       const statusData = await statusResponse.json();
-      if (statusData.data.taskStatus === 'TaskFinish') {
-        return statusData.data.downloadFileUrl;
+      console.log('Task status response:', statusData);
+      
+      // Check if task is complete
+      if (statusData.data?.taskStatus === 'TaskFinish') {
+        const downloadUrl = statusData.data?.fileInfo?.[0]?.downloadFileUrl;
+        if (downloadUrl) {
+          return downloadUrl;
+        } else {
+          throw new Error('Task finished but no download URL found in response');
+        }
+      }
+      
+      // Check for task failure
+      if (statusData.data?.taskStatus === 'TaskFail') {
+        throw new Error(`Task failed: ${statusData.data?.message || 'Unknown error'}`);
       }
     }
-    throw new Error('Conversion timeout after 60 seconds');
+    throw new Error('Conversion timeout after 120 seconds');
   };
 
   const handleDocumentProcess = async () => {
@@ -103,7 +122,7 @@ export default function DocumentConverter() {
       const formData = new FormData();
       formData.append('file', file, file.name);
       formData.append('taskId', taskId);
-      // Optional: Configure conversion parameters (see API docs)
+      // Configure conversion parameters for best quality
       formData.append('parameter', JSON.stringify({
         isContainAnnot: 1,   // Include annotations
         isContainImg: 1,     // Include images
