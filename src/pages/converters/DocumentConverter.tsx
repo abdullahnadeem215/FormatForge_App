@@ -1,14 +1,16 @@
 import React, { useState, useCallback } from 'react';
 import { useDropzone } from 'react-dropzone';
 import { motion } from 'motion/react';
-import { File, X, CheckCircle2, AlertCircle, Download, Loader2, FileText, Zap } from 'lucide-react';
+import { X, CheckCircle2, AlertCircle, Download, Loader2, FileText, Zap } from 'lucide-react';
 import { saveConversion } from '../../utils/storage';
 import { cn } from '../../lib/utils';
 import { Filesystem, Directory } from '@capacitor/filesystem';
 import { Share } from '@capacitor/share';
 
-// Your Gotenberg endpoint (deployed on Render)
-const GOTENBERG_API_URL = 'https://gotenberg-pdf.fly.dev';
+// Your ComPDF API credentials (replace these with your actual keys)
+const COMPDF_PUBLIC_KEY = 'public_key_845596ca8f8be8db1ff646ffba18ca40';
+const COMPDF_SECRET_KEY = 'secret_key_d16ca651b03ba3cbb0163e77a6c52052';
+const COMPDF_BASE_URL = 'https://api-server.compdf.com/server/v1';
 
 export default function DocumentConverter() {
   const [file, setFile] = useState<File | null>(null);
@@ -33,15 +35,12 @@ export default function DocumentConverter() {
       reader.readAsDataURL(blob);
       reader.onloadend = async () => {
         const base64 = (reader.result as string).split(',')[1];
-        
         await Filesystem.writeFile({
           path: fileName,
           data: base64,
           directory: Directory.Documents
         });
-        
         alert(`✅ Saved to Documents/${fileName}`);
-        
         await Share.share({
           title: 'File Converted',
           text: 'Check out my converted file!',
@@ -54,6 +53,22 @@ export default function DocumentConverter() {
     }
   };
 
+  // Helper function to poll for task completion
+  const pollTaskStatus = async (accessToken: string, taskId: string, maxAttempts = 30, delayMs = 2000): Promise<string> => {
+    for (let i = 0; i < maxAttempts; i++) {
+      await new Promise(resolve => setTimeout(resolve, delayMs));
+      const statusResponse = await fetch(`${COMPDF_BASE_URL}/task/taskInfo?taskId=${taskId}`, {
+        method: 'GET',
+        headers: { 'Authorization': `Bearer ${accessToken}` }
+      });
+      const statusData = await statusResponse.json();
+      if (statusData.data.taskStatus === 'TaskFinish') {
+        return statusData.data.downloadFileUrl;
+      }
+    }
+    throw new Error('Conversion timeout after 60 seconds');
+  };
+
   const handleDocumentProcess = async () => {
     if (!file) return;
     setProcessing(true);
@@ -61,42 +76,75 @@ export default function DocumentConverter() {
     setResult(null);
     setSummary(null);
 
-    // Show loading message for large files
-    const isLargeFile = file.size > 2 * 1024 * 1024;
-    
     try {
-      const formData = new FormData();
-      formData.append('files', file);
-
-      // Create AbortController with 90 second timeout (Render free tier allows this)
-      const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 120000); // 90 seconds timeout
-
-      const response = await fetch(`${GOTENBERG_API_URL}/forms/libreoffice/convert`, {
+      // 1. Authentication: Get Access Token
+      const authResponse = await fetch(`${COMPDF_BASE_URL}/oauth/token`, {
         method: 'POST',
-        body: formData,
-        signal: controller.signal,
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          publicKey: COMPDF_PUBLIC_KEY,
+          secretKey: COMPDF_SECRET_KEY
+        })
       });
+      const authData = await authResponse.json();
+      if (!authResponse.ok) throw new Error('Authentication failed: ' + JSON.stringify(authData));
+      const accessToken = authData.data.accessToken;
 
-      clearTimeout(timeoutId);
+      // 2. Create a PDF to Word task
+      const createTaskResponse = await fetch(`${COMPDF_BASE_URL}/task/pdf/docx?language=2`, {
+        method: 'GET',
+        headers: { 'Authorization': `Bearer ${accessToken}` }
+      });
+      const createTaskData = await createTaskResponse.json();
+      if (!createTaskResponse.ok) throw new Error('Task creation failed: ' + JSON.stringify(createTaskData));
+      const taskId = createTaskData.data.taskId;
 
-      if (!response.ok) {
-        const errorText = await response.text();
-        throw new Error(`Conversion failed: ${response.status}`);
-      }
+      // 3. Upload the PDF file
+      const formData = new FormData();
+      formData.append('file', file, file.name);
+      formData.append('taskId', taskId);
+      // Optional: Configure conversion parameters (see API docs)
+      formData.append('parameter', JSON.stringify({
+        isContainAnnot: 1,   // Include annotations
+        isContainImg: 1,     // Include images
+        wordLayoutMode: 2,   // Keep original layout
+        isAllowOcr: 0,
+        isContainOcrBg: 0,
+        isOnlyAiTable: 0,
+        ocrLanguage: 0
+      }));
+      formData.append('language', '2');
 
-      const docxBlob = await response.blob();
+      const uploadResponse = await fetch(`${COMPDF_BASE_URL}/file/upload`, {
+        method: 'POST',
+        headers: { 'Authorization': `Bearer ${accessToken}` },
+        body: formData
+      });
+      const uploadData = await uploadResponse.json();
+      if (!uploadResponse.ok) throw new Error('File upload failed: ' + JSON.stringify(uploadData));
+
+      // 4. Execute the conversion task
+      const executeResponse = await fetch(`${COMPDF_BASE_URL}/execute/start?language=2&taskId=${taskId}`, {
+        method: 'GET',
+        headers: { 'Authorization': `Bearer ${accessToken}` }
+      });
+      const executeData = await executeResponse.json();
+      if (!executeResponse.ok) throw new Error('Task execution failed: ' + JSON.stringify(executeData));
+
+      // 5. Poll for completion and get the download URL
+      const downloadUrl = await pollTaskStatus(accessToken, taskId);
+      if (!downloadUrl) throw new Error('No download URL received');
+
+      // 6. Download the converted DOCX file
+      const downloadRes = await fetch(downloadUrl);
+      const docxBlob = await downloadRes.blob();
       const docUrl = URL.createObjectURL(docxBlob);
-      const outputFileName = file.name.substring(0, file.name.lastIndexOf('.')) + '.docx';
+      const outputFileName = file.name.replace('.pdf', '.docx');
 
-      const conversionResult = {
-        docUrl,
-        name: outputFileName
-      };
+      setResult({ docUrl, name: outputFileName });
+      setSummary("PDF converted to Word successfully using ComPDF API!");
 
-      setResult(conversionResult);
-      setSummary("PDF converted to Word successfully!");
-
+      // Save to history and device
       saveConversion({
         type: 'document',
         input_format: 'pdf',
@@ -104,21 +152,14 @@ export default function DocumentConverter() {
         input_size: file.size,
         output_size: docxBlob.size,
         status: 'completed',
-        file_name: conversionResult.name
+        file_name: outputFileName
       }, docxBlob);
 
-      await saveToDevice(docxBlob, conversionResult.name);
+      await saveToDevice(docxBlob, outputFileName);
 
     } catch (err) {
       console.error('Conversion error:', err);
-      
-      if (err.name === 'AbortError') {
-        setError('Conversion timed out after 90 seconds. The file may be too complex. Try a different PDF.');
-      } else if (err.message.includes('Failed to fetch')) {
-        setError('Cannot reach conversion server. Please check your internet connection.');
-      } else {
-        setError(err instanceof Error ? err.message : 'Processing failed. Please try again.');
-      }
+      setError(err instanceof Error ? err.message : 'Processing failed. Please try again.');
     } finally {
       setProcessing(false);
     }
@@ -144,10 +185,10 @@ export default function DocumentConverter() {
         <div className="flex items-center gap-2">
           <h2 className="text-3xl font-light tracking-tight">Document Pro</h2>
           <span className="px-2.5 py-1 bg-purple-500/10 border border-purple-500/20 rounded-md text-[10px] font-bold text-purple-400 uppercase tracking-wider">
-            PDF Converter
+            PDF to Word
           </span>
         </div>
-        <p className="text-text-dim text-sm">Convert PDF to Word format.</p>
+        <p className="text-text-dim text-sm">Convert PDF to Word. Preserves formatting, tables, and images.</p>
       </header>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
@@ -188,10 +229,22 @@ export default function DocumentConverter() {
                    </div>
                    <div>
                      <p className="text-lg font-medium text-white">Conversion Successful</p>
-                     <p className="text-sm text-text-dim">Your Word document is ready.</p>
+                     <p className="text-sm text-text-dim">Your editable Word document is ready.</p>
                    </div>
                 </div>
               </div>
+
+              {summary && (
+                <div className="p-8 bg-purple-500/5 border border-purple-500/20 rounded-[24px] space-y-4">
+                  <h3 className="text-lg font-semibold flex items-center gap-2">
+                    <Zap className="w-5 h-5 text-purple-400" />
+                    Status
+                  </h3>
+                  <div className="text-text-dim leading-relaxed text-sm whitespace-pre-line">
+                    {summary}
+                  </div>
+                </div>
+              )}
             </div>
           )}
 
@@ -211,16 +264,20 @@ export default function DocumentConverter() {
 
         <div className="space-y-6">
           <div className="p-6 bg-surface border border-border rounded-[24px] space-y-6">
-            <h3 className="font-semibold text-lg">PDF Converter</h3>
+            <h3 className="font-semibold text-lg">PDF to Word Converter</h3>
             
             <div className="space-y-2">
               <div className="p-3 rounded-xl border border-purple-500 bg-purple-500/5">
-                <div className="font-bold text-sm">Free & Unlimited</div>
-                <div className="text-[10px] opacity-70">No subscription required</div>
+                <div className="font-bold text-sm">DOCX Output</div>
+                <div className="text-[10px] opacity-70">Preserves formatting, tables, images</div>
               </div>
               <div className="p-3 rounded-xl border border-purple-500 bg-purple-500/5">
-                <div className="font-bold text-sm">Preserves Formatting</div>
-                <div className="text-[10px] opacity-70">Tables, images, fonts retained</div>
+                <div className="font-bold text-sm">1,000 Free Conversions/Month</div>
+                <div className="text-[10px] opacity-70">No credit card required</div>
+              </div>
+              <div className="p-3 rounded-xl border border-purple-500 bg-purple-500/5">
+                <div className="font-bold text-sm">High Quality</div>
+                <div className="text-[10px] opacity-70">Professional conversion quality</div>
               </div>
             </div>
 
@@ -233,7 +290,7 @@ export default function DocumentConverter() {
               {processing ? (
                 <>
                   <Loader2 className="w-5 h-5 animate-spin" />
-                  Converting... (up to 90 seconds)
+                  Converting...
                 </>
               ) : (
                 <>Convert to Word</>
