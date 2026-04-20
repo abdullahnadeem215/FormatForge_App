@@ -10,11 +10,7 @@ import { Share } from '@capacitor/share';
 // ComPDF API configuration - REPLACE WITH YOUR ACTUAL KEYS
 const COMPDF_PUBLIC_KEY = 'public_key_845596ca8f8be8db1ff646ffba18ca40';
 const COMPDF_SECRET_KEY = 'secret_key_d16ca651b03ba3cbb0163e77a6c52052';
-// Use the correct base URL for your region
-// For global users:
 const COMPDF_BASE_URL = 'https://api-server.compdf.com/server/v1';
-// For users in China:
-// const COMPDF_BASE_URL = 'https://api-server.compdf.cn/server/v1';
 
 export default function DocumentConverter() {
   const [file, setFile] = useState<File | null>(null);
@@ -57,6 +53,36 @@ export default function DocumentConverter() {
     }
   };
 
+  // Helper function to extract download URL from various response formats
+  const extractDownloadUrl = (data: any): string | null => {
+    // Try different possible locations for the download URL
+    const possiblePaths = [
+      () => data.data?.fileInfo?.[0]?.downloadFileUrl,
+      () => data.data?.downloadFileUrl,
+      () => data.data?.fileUrl,
+      () => data.data?.downloadUrl,
+      () => data.data?.result?.downloadUrl,
+      () => data.data?.result?.fileUrl,
+      () => data.data?.files?.[0]?.url,
+      () => data.downloadFileUrl,
+      () => data.fileUrl,
+      () => data.downloadUrl,
+      () => data.url
+    ];
+
+    for (const getUrl of possiblePaths) {
+      try {
+        const url = getUrl();
+        if (url && typeof url === 'string' && (url.startsWith('http://') || url.startsWith('https://'))) {
+          return url;
+        }
+      } catch (e) {
+        continue;
+      }
+    }
+    return null;
+  };
+
   // Helper function to poll for task completion
   const pollTaskStatus = async (accessToken: string, taskId: string, maxAttempts = 60, delayMs = 2000): Promise<string> => {
     for (let i = 0; i < maxAttempts; i++) {
@@ -68,21 +94,36 @@ export default function DocumentConverter() {
       });
       
       const statusData = await statusResponse.json();
-      console.log('Task status response:', statusData);
+      console.log('Task status response:', JSON.stringify(statusData, null, 2));
       
       // Check if task is complete
       if (statusData.data?.taskStatus === 'TaskFinish') {
-        const downloadUrl = statusData.data?.fileInfo?.[0]?.downloadFileUrl;
+        const downloadUrl = extractDownloadUrl(statusData);
         if (downloadUrl) {
+          console.log('Found download URL:', downloadUrl);
           return downloadUrl;
         } else {
+          // If task is finished but no URL, try to get it from the task info directly
+          console.warn('Task finished but no download URL in standard location, checking full response');
+          // Check if there's a fileInfo array with URL
+          if (statusData.data?.fileInfo && statusData.data.fileInfo.length > 0) {
+            const fileUrl = statusData.data.fileInfo[0].downloadFileUrl || 
+                           statusData.data.fileInfo[0].fileUrl || 
+                           statusData.data.fileInfo[0].url;
+            if (fileUrl) return fileUrl;
+          }
           throw new Error('Task finished but no download URL found in response');
         }
       }
       
       // Check for task failure
       if (statusData.data?.taskStatus === 'TaskFail') {
-        throw new Error(`Task failed: ${statusData.data?.message || 'Unknown error'}`);
+        throw new Error(`Task failed: ${statusData.data?.message || statusData.data?.failMessage || 'Unknown error'}`);
+      }
+      
+      // Log progress
+      if (statusData.data?.taskStatus) {
+        console.log(`Attempt ${i + 1}/${maxAttempts}: Status = ${statusData.data.taskStatus}`);
       }
     }
     throw new Error('Conversion timeout after 120 seconds');
@@ -97,6 +138,7 @@ export default function DocumentConverter() {
 
     try {
       // 1. Authentication: Get Access Token
+      console.log('1. Getting access token...');
       const authResponse = await fetch(`${COMPDF_BASE_URL}/oauth/token`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -108,8 +150,10 @@ export default function DocumentConverter() {
       const authData = await authResponse.json();
       if (!authResponse.ok) throw new Error('Authentication failed: ' + JSON.stringify(authData));
       const accessToken = authData.data.accessToken;
+      console.log('Access token obtained');
 
       // 2. Create a PDF to Word task
+      console.log('2. Creating PDF to Word task...');
       const createTaskResponse = await fetch(`${COMPDF_BASE_URL}/task/pdf/docx?language=2`, {
         method: 'GET',
         headers: { 'Authorization': `Bearer ${accessToken}` }
@@ -117,16 +161,17 @@ export default function DocumentConverter() {
       const createTaskData = await createTaskResponse.json();
       if (!createTaskResponse.ok) throw new Error('Task creation failed: ' + JSON.stringify(createTaskData));
       const taskId = createTaskData.data.taskId;
+      console.log('Task created with ID:', taskId);
 
       // 3. Upload the PDF file
+      console.log('3. Uploading PDF file...');
       const formData = new FormData();
       formData.append('file', file, file.name);
       formData.append('taskId', taskId);
-      // Configure conversion parameters for best quality
       formData.append('parameter', JSON.stringify({
-        isContainAnnot: 1,   // Include annotations
-        isContainImg: 1,     // Include images
-        wordLayoutMode: 2,   // Keep original layout
+        isContainAnnot: 1,
+        isContainImg: 1,
+        wordLayoutMode: 2,
         isAllowOcr: 0,
         isContainOcrBg: 0,
         isOnlyAiTable: 0,
@@ -141,20 +186,26 @@ export default function DocumentConverter() {
       });
       const uploadData = await uploadResponse.json();
       if (!uploadResponse.ok) throw new Error('File upload failed: ' + JSON.stringify(uploadData));
+      console.log('File uploaded successfully');
 
       // 4. Execute the conversion task
+      console.log('4. Executing conversion task...');
       const executeResponse = await fetch(`${COMPDF_BASE_URL}/execute/start?language=2&taskId=${taskId}`, {
         method: 'GET',
         headers: { 'Authorization': `Bearer ${accessToken}` }
       });
       const executeData = await executeResponse.json();
       if (!executeResponse.ok) throw new Error('Task execution failed: ' + JSON.stringify(executeData));
+      console.log('Task execution started');
 
       // 5. Poll for completion and get the download URL
+      console.log('5. Polling for task completion...');
       const downloadUrl = await pollTaskStatus(accessToken, taskId);
       if (!downloadUrl) throw new Error('No download URL received');
+      console.log('Download URL obtained:', downloadUrl);
 
       // 6. Download the converted DOCX file
+      console.log('6. Downloading converted file...');
       const downloadRes = await fetch(downloadUrl);
       const docxBlob = await downloadRes.blob();
       const docUrl = URL.createObjectURL(docxBlob);
