@@ -1,4 +1,4 @@
-package com.maahhha.formatforge;
+import com.maahhha.formatforge.app.plugins.TextToSpeechPlugin;
 
 import android.os.Bundle;
 import com.getcapacitor.BridgeActivity;
