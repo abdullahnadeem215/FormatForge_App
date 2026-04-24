@@ -2,13 +2,12 @@ import { useState } from 'react';
 import { Capacitor } from '@capacitor/core';
 import { Filesystem, Directory } from '@capacitor/filesystem';
 
-interface TextToSpeechPlugin {
-  convert(options: { text: string; language: string; outputPath: string }): Promise<{ outputPath: string }>;
-}
-
+// Extend Capacitor's plugin registry to include our TextToSpeech plugin
 declare module '@capacitor/core' {
   interface PluginRegistry {
-    TextToSpeech: TextToSpeechPlugin;
+    TextToSpeech: {
+      convert(options: { text: string; language: string; outputPath: string }): Promise<{ outputPath: string }>;
+    };
   }
 }
 
@@ -27,6 +26,10 @@ export const useTextToSpeech = () => {
       }
 
       const { TextToSpeech } = Capacitor.Plugins;
+      if (!TextToSpeech) {
+        throw new Error('TextToSpeech plugin not available');
+      }
+
       const fileName = `tts_${Date.now()}.mp3`;
       const result = await Filesystem.getUri({
         directory: Directory.Cache,
