@@ -6,7 +6,8 @@ import {
   Video, 
   FileText, 
   ArrowRight,
-  Zap
+  Zap,
+  Mic                      // ✅ NEW icon
 } from 'lucide-react';
 import { Link } from 'react-router-dom';
 
@@ -43,6 +44,15 @@ const converters = [
     color: 'from-orange-500 to-amber-500',
     isAI: true,
     path: '/convert/document'
+  },
+  // ✅ NEW: Text to Speech card
+  {
+    id: 'text-to-speech',
+    title: 'Text to Speech',
+    description: 'Convert any text to MP3 audio – 100% offline.',
+    icon: <Mic className="w-8 h-8" />,
+    color: 'from-emerald-500 to-teal-500',
+    path: '/text-to-speech'
   }
 ];
 
@@ -89,6 +99,10 @@ export default function Home() {
                 <span className="absolute top-6 right-6 px-2.5 py-1 bg-purple-500/10 border border-purple-500/20 rounded-md text-[10px] font-bold text-purple-400 uppercase tracking-wider">
                   PDF-TO-DOCX
                 </span>
+              ) : converter.id === 'text-to-speech' ? (
+                <span className="absolute top-6 right-6 px-2.5 py-1 bg-emerald-500/10 border border-emerald-500/20 rounded-md text-[10px] font-bold text-emerald-400 uppercase tracking-wider">
+                  NEW
+                </span>
               ) : (
                 <span className="absolute top-6 right-6 px-2.5 py-1 bg-text-dim/5 border border-text-dim/20 rounded-md text-[10px] font-bold text-text-dim uppercase tracking-wider">
                   Offline
@@ -118,5 +132,3 @@ export default function Home() {
     </motion.div>
   );
 }
-
-import { cn } from '../lib/utils';
