@@ -2,15 +2,6 @@ import { useState } from 'react';
 import { Capacitor } from '@capacitor/core';
 import { Filesystem, Directory } from '@capacitor/filesystem';
 
-// Extend Capacitor's plugin registry to include our TextToSpeech plugin
-declare module '@capacitor/core' {
-  interface PluginRegistry {
-    TextToSpeech: {
-      convert(options: { text: string; language: string; outputPath: string }): Promise<{ outputPath: string }>;
-    };
-  }
-}
-
 export const useTextToSpeech = () => {
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -25,7 +16,8 @@ export const useTextToSpeech = () => {
         throw new Error('Text to Speech is only available on Android');
       }
 
-      const { TextToSpeech } = Capacitor.Plugins;
+      // Safe cast – Capacitor.Plugins exists at runtime
+      const { TextToSpeech } = (Capacitor as any).Plugins;
       if (!TextToSpeech) {
         throw new Error('TextToSpeech plugin not available');
       }
