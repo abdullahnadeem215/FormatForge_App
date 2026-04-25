@@ -3,16 +3,6 @@ import { useState } from 'react';
 import { Capacitor } from '@capacitor/core';
 import { Filesystem, Directory } from '@capacitor/filesystem';
 
-interface BackgroundRemoverPlugin {
-  removeBackground(options: { image: string }): Promise<{ result: string }>;
-}
-
-declare module '@capacitor/core' {
-  interface PluginRegistry {
-    BackgroundRemover: BackgroundRemoverPlugin;
-  }
-}
-
 export const useBackgroundRemover = () => {
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -26,12 +16,13 @@ export const useBackgroundRemover = () => {
         throw new Error('Background removal is only available on Android');
       }
 
-      const { BackgroundRemover } = Capacitor.Plugins;
+      // @ts-ignore - Capacitor plugins are available at runtime
+      const { BackgroundRemover } = (Capacitor as any).Plugins;
       if (!BackgroundRemover) {
         throw new Error('BackgroundRemover plugin not available');
       }
 
-      // Convert file to base64 (data URL)
+      // Convert file to base64 data URL
       const base64Data = await new Promise<string>((resolve, reject) => {
         const reader = new FileReader();
         reader.onloadend = () => resolve(reader.result as string);
@@ -39,15 +30,20 @@ export const useBackgroundRemover = () => {
         reader.readAsDataURL(imageFile);
       });
 
-      // Call native plugin
+      // Call native plugin – expects base64 string (may include data: prefix)
       const response = await BackgroundRemover.removeBackground({ image: base64Data });
-      const resultBase64 = response.result; // Expecting base64 with data URL prefix
+      const resultBase64 = response.result; // Should be a data URL or raw base64
+
+      // Ensure it starts with data:image to be valid for Filesystem
+      const finalBase64 = resultBase64.startsWith('data:') 
+        ? resultBase64 
+        : `data:image/png;base64,${resultBase64}`;
 
       // Save to cache directory
       const fileName = `bg_removed_${Date.now()}.png`;
       await Filesystem.writeFile({
         path: fileName,
-        data: resultBase64,
+        data: finalBase64,
         directory: Directory.Cache,
       });
       const fileUri = await Filesystem.getUri({
