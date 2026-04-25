@@ -1,4 +1,4 @@
-package com.maahhha.formatforge.plugins;
+package com.maahhha.formatforge;
 
 import android.graphics.Bitmap;
 import android.graphics.BitmapFactory;
@@ -24,15 +24,14 @@ public class BackgroundRemoverPlugin extends Plugin {
 
     @PluginMethod
     public void removeBackground(PluginCall call) {
-        String imageBase64 = call.getString("image");
-        if (imageBase64 == null) {
+        String base64Image = call.getString("image");
+        if (base64Image == null) {
             call.reject("No image provided");
             return;
         }
 
-        // Remove data URL prefix if present (e.g., "data:image/png;base64,")
-        String pureBase64 = imageBase64.contains(",") ? imageBase64.split(",")[1] : imageBase64;
-
+        // Remove data URL prefix if present
+        String pureBase64 = base64Image.contains(",") ? base64Image.split(",")[1] : base64Image;
         byte[] decodedBytes = Base64.decode(pureBase64, Base64.DEFAULT);
         Bitmap originalBitmap = BitmapFactory.decodeByteArray(decodedBytes, 0, decodedBytes.length);
 
@@ -41,7 +40,7 @@ public class BackgroundRemoverPlugin extends Plugin {
             return;
         }
 
-        // Run on background thread
+        // Process on background thread
         new Thread(() -> {
             try {
                 InputImage inputImage = InputImage.fromBitmap(originalBitmap, 0);
@@ -54,11 +53,11 @@ public class BackgroundRemoverPlugin extends Plugin {
                         .addOnSuccessListener(result -> {
                             Bitmap foregroundBitmap = result.getForegroundBitmap();
                             if (foregroundBitmap == null) {
-                                mainHandler.post(() -> call.reject("No foreground detected"));
+                                mainHandler.post(() -> call.reject("No foreground found"));
                                 return;
                             }
 
-                            // Convert result to base64
+                            // Convert to Base64 data URL
                             ByteArrayOutputStream stream = new ByteArrayOutputStream();
                             foregroundBitmap.compress(Bitmap.CompressFormat.PNG, 100, stream);
                             byte[] bytes = stream.toByteArray();
