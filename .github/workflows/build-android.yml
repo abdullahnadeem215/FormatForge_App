@@ -22,17 +22,16 @@ jobs:
         uses: actions/setup-java@v4
         with:
           distribution: 'temurin'
-          java-version: '21'
+          java-version: '17'
 
       - name: Install dependencies
         run: npm install
 
-      - name: Install Capacitor and community TTS plugin
+      - name: Install Capacitor plugins
         run: |
-          npm install @capacitor/core @capacitor/cli @capacitor/android
-          npm install @capacitor-community/text-to-speech
+          npm install @capacitor-mlkit/subject-segmentation
 
-      - name: Build web app (TypeScript will now find the module)
+      - name: Build web app
         run: npm run build
 
       - name: Copy web build to Android
