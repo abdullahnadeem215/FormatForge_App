@@ -1,7 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { SplashScreen } from '@capacitor/splash-screen';
 import TextToSpeech from './pages/TextToSpeech';
-import BackgroundRemover from './pages/BackgroundRemover';
 import { 
   BrowserRouter as Router, 
   Routes, 
@@ -18,7 +17,6 @@ import {
   X,
   Zap,
   Mic,
-  Wand2,
 } from 'lucide-react';
 import { cn } from './lib/utils';
 import { motion, AnimatePresence } from 'motion/react';
@@ -77,7 +75,6 @@ function App() {
               <SidebarLink to="/history" icon={<History className="w-4 h-4" />} label="History" onClick={() => setIsSidebarOpen(false)} />
               <SidebarLink to="/profile" icon={<User className="w-4 h-4" />} label="Profile" onClick={() => setIsSidebarOpen(false)} />
               <SidebarLink to="/text-to-speech" icon={<Mic className="w-4 h-4" />} label="Text to Speech" onClick={() => setIsSidebarOpen(false)} />
-              <SidebarLink to="/bg-remover" icon={<Wand2 className="w-4 h-4" />} label="BG Remover" onClick={() => setIsSidebarOpen(false)} />
             </nav>
 
             <div className="pt-6 border-t border-border">
@@ -98,7 +95,6 @@ function App() {
                 <Route path="/convert/audio" element={<MediaConverter />} />
                 <Route path="/convert/video-to-audio" element={<MediaConverter />} />
                 <Route path="/text-to-speech" element={<TextToSpeech />} />
-                <Route path="/bg-remover" element={<BackgroundRemover />} />
                 <Route path="*" element={<Navigate to="/" />} />
               </Routes>
             </AnimatePresence>
