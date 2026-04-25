@@ -1,12 +1,15 @@
+// src/pages/BackgroundRemover.tsx
 import React, { useState } from 'react';
 import { motion } from 'motion/react';
 import { Wand2, Download, Share2, Loader2, Image as ImageIcon } from 'lucide-react';
 import { useBackgroundRemover } from '../hooks/useBackgroundRemover';
+import { Share } from '@capacitor/share';
+import { Filesystem, Directory } from '@capacitor/filesystem';
 
 const BackgroundRemover: React.FC = () => {
   const [selectedImage, setSelectedImage] = useState<string | null>(null);
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
-  const { removeBackground, download, share, isLoading, error, resultPath } = useBackgroundRemover();
+  const { removeBackground, isLoading, error, resultPath } = useBackgroundRemover();
 
   const handleImageSelect = (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
@@ -26,6 +29,39 @@ const BackgroundRemover: React.FC = () => {
     await removeBackground(selectedFile);
   };
 
+  const downloadImage = async () => {
+    if (!resultPath) return;
+    try {
+      // Read the file from the filesystem
+      const fileData = await Filesystem.readFile({
+        path: resultPath,
+        directory: Directory.Cache,
+      });
+      // For web, create a blob and trigger download
+      const base64 = fileData.data as string;
+      const link = document.createElement('a');
+      link.href = base64;
+      link.download = 'background_removed.png';
+      link.click();
+    } catch (err) {
+      console.error('Download failed', err);
+      alert('Download failed');
+    }
+  };
+
+  const shareImage = async () => {
+    if (!resultPath) return;
+    try {
+      await Share.share({
+        title: 'Background Removed Image',
+        url: resultPath,
+      });
+    } catch (err) {
+      console.error('Share failed', err);
+      alert('Share failed');
+    }
+  };
+
   return (
     <motion.div
       initial={{ opacity: 0, y: 20 }}
@@ -39,7 +75,7 @@ const BackgroundRemover: React.FC = () => {
         </div>
         <div>
           <h1 className="text-2xl font-bold">Background Remover</h1>
-          <p className="text-text-dim text-sm">Remove image backgrounds with FormatForge – offline after first use</p>
+          <p className="text-text-dim text-sm">Native background removal – fast & offline</p>
         </div>
       </div>
 
@@ -74,7 +110,7 @@ const BackgroundRemover: React.FC = () => {
           {isLoading ? (
             <>
               <Loader2 className="w-5 h-5 animate-spin" />
-              Processing (may take 20-30s first time)...
+              Processing...
             </>
           ) : (
             <>
@@ -94,14 +130,14 @@ const BackgroundRemover: React.FC = () => {
             <p className="text-green-400 text-sm">✅ Background removed successfully!</p>
             <div className="flex gap-3">
               <button
-                onClick={download}
+                onClick={downloadImage}
                 className="flex-1 py-2 bg-green-600 hover:bg-green-700 rounded-lg text-sm font-medium flex items-center justify-center gap-2"
               >
                 <Download className="w-4 h-4" />
                 Download
               </button>
               <button
-                onClick={share}
+                onClick={shareImage}
                 className="flex-1 py-2 bg-blue-600 hover:bg-blue-700 rounded-lg text-sm font-medium flex items-center justify-center gap-2"
               >
                 <Share2 className="w-4 h-4" />
