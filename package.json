@@ -13,7 +13,7 @@
     "lint": "tsc --noEmit"
   },
   "dependencies": {
-    "@imgly/background-removal": "^1.4.0",
+    "@mediapipe/selfie_segmentation": "^0.1.0",
     "@adobe/pdfservices-node-sdk": "^3.4.1",
     "@capacitor/android": "^8.3.1",
     "@capacitor/core": "^8.3.1",
