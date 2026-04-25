@@ -1,37 +1,36 @@
-// src/hooks/useTextToSpeech.ts
 import { useState } from 'react';
 import { Capacitor } from '@capacitor/core';
+import { Filesystem, Directory } from '@capacitor/filesystem';
 
 export const useTextToSpeech = () => {
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [outputPath, setOutputPath] = useState<string | null>(null);
 
+  const getPlugin = () => {
+    // @ts-ignore - Capacitor plugins are available at runtime
+    const plugin = Capacitor.Plugins?.TextToSpeech;
+    if (!plugin) {
+      const available = Object.keys(Capacitor.Plugins || {});
+      throw new Error(`TextToSpeech plugin not found. Available plugins: ${available.join(', ')}`);
+    }
+    return plugin;
+  };
+
   const convert = async (text: string, language: string) => {
     setIsLoading(true);
     setError(null);
-
     try {
       if (!Capacitor.isNativePlatform()) {
-        throw new Error('TTS only on Android');
+        throw new Error('Text to Speech is only available on Android');
       }
-
-      const plugin = (Capacitor as any).Plugins?.TextToSpeech;
-      if (!plugin) {
-        throw new Error('TextToSpeech plugin not registered');
-      }
-
-      const outputFile = `tts_${Date.now()}.mp3`;
-      // Note: In real usage, you'd get URI via Filesystem – but for testing, pass a dummy path
-      // For now, let the plugin handle path – but you must use Filesystem to get a writable path.
-      // To avoid crash, let's use a simple cache path:
-      const { Filesystem, Directory } = await import('@capacitor/filesystem');
+      const TextToSpeech = getPlugin();
+      const fileName = `tts_${Date.now()}.mp3`;
       const result = await Filesystem.getUri({
         directory: Directory.Cache,
-        path: outputFile
+        path: fileName
       });
-
-      const response = await plugin.convert({
+      const response = await TextToSpeech.convert({
         text,
         language,
         outputPath: result.uri
