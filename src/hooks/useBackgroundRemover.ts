@@ -1,6 +1,6 @@
 // src/hooks/useBackgroundRemover.ts
 import { useState } from 'react';
-import { SubjectSegmentation } from '@capacitor-mlkit/subject-segmentation';
+import { SelfieSegmentation } from '@capacitor-mlkit/selfie-segmentation';
 import { Filesystem, Directory } from '@capacitor/filesystem';
 
 export const useBackgroundRemover = () => {
@@ -12,7 +12,7 @@ export const useBackgroundRemover = () => {
     setIsLoading(true);
     setError(null);
     try {
-      // 1. Convert the selected image file to a base64 string
+      // Convert to base64
       const base64 = await new Promise<string>((resolve, reject) => {
         const reader = new FileReader();
         reader.onloadend = () => resolve(reader.result as string);
@@ -20,16 +20,13 @@ export const useBackgroundRemover = () => {
         reader.readAsDataURL(imageFile);
       });
 
-      // 2. Call the correct ML Kit plugin method
-      const { result } = await SubjectSegmentation.processImage({ 
-        base64Image: base64 
+      // Call the selfie segmentation API
+      const { result } = await SelfieSegmentation.processImage({
+        image: { base64Image: base64 },
       });
 
-      if (!result) {
-        throw new Error("SubjectSegmentation returned no result");
-      }
+      if (!result) throw new Error('Segmentation failed');
 
-      // 3. Save the resulting foreground bitmap as a PNG file
       const fileName = `bg_removed_${Date.now()}.png`;
       await Filesystem.writeFile({
         path: fileName,
@@ -37,15 +34,11 @@ export const useBackgroundRemover = () => {
         directory: Directory.Cache,
       });
 
-      const fileUri = await Filesystem.getUri({ 
-        directory: Directory.Cache, 
-        path: fileName 
-      });
+      const fileUri = await Filesystem.getUri({ directory: Directory.Cache, path: fileName });
       setResultPath(fileUri.uri);
       return fileUri.uri;
     } catch (err: any) {
-      console.error("Background removal error:", err);
-      setError(err.message || "Background removal failed");
+      setError(err.message);
       throw err;
     } finally {
       setIsLoading(false);
