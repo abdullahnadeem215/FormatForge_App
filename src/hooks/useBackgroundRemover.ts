@@ -1,3 +1,4 @@
+// src/hooks/useBackgroundRemover.ts
 import { useState } from 'react';
 import { Capacitor } from '@capacitor/core';
 import { Filesystem, Directory } from '@capacitor/filesystem';
@@ -12,10 +13,10 @@ export const useBackgroundRemover = () => {
     setError(null);
     try {
       if (!Capacitor.isNativePlatform()) {
-        throw new Error('Background removal is only available on Android');
+        throw new Error('Background removal only works on Android devices');
       }
 
-      // 1. Convert the selected file to a Base64 string
+      // Convert file to base64 data URL
       const base64Data = await new Promise<string>((resolve, reject) => {
         const reader = new FileReader();
         reader.onloadend = () => resolve(reader.result as string);
@@ -23,27 +24,23 @@ export const useBackgroundRemover = () => {
         reader.readAsDataURL(imageFile);
       });
 
-      // 2. Call the native plugin
       // @ts-ignore - Capacitor plugins are available at runtime
       const { BackgroundRemover } = Capacitor.Plugins;
       if (!BackgroundRemover) {
-        throw new Error('BackgroundRemover plugin not available');
+        throw new Error('BackgroundRemover plugin not registered');
       }
-      const response = await BackgroundRemover.removeBackground({ image: base64Data });
-      const resultBase64 = response.result;
 
-      // 3. Save the result Base64 string to a file
+      const response = await BackgroundRemover.removeBackground({ image: base64Data });
+      const resultBase64 = response.result; // Already a data URL with PNG
+
+      // Save to cache
       const fileName = `bg_removed_${Date.now()}.png`;
       await Filesystem.writeFile({
         path: fileName,
         data: resultBase64,
         directory: Directory.Cache,
       });
-
-      const fileUri = await Filesystem.getUri({
-        path: fileName,
-        directory: Directory.Cache,
-      });
+      const fileUri = await Filesystem.getUri({ path: fileName, directory: Directory.Cache });
       setResultPath(fileUri.uri);
       return fileUri.uri;
     } catch (err: any) {
