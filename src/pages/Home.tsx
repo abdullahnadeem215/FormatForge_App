@@ -5,7 +5,8 @@ import {
   Music, 
   Video, 
   Zap,
-  Mic
+  Mic,
+  Wand2
 } from 'lucide-react';
 import { Link } from 'react-router-dom';
 
@@ -41,6 +42,14 @@ const converters = [
     icon: <Mic className="w-8 h-8" />,
     color: 'from-emerald-500 to-teal-500',
     path: '/text-to-speech'
+  },
+  {
+    id: 'bg-remover',
+    title: 'Background Remover',
+    description: 'Fast AI background removal (ML Kit) – offline after first use.',
+    icon: <Wand2 className="w-8 h-8" />,
+    color: 'from-cyan-500 to-blue-500',
+    path: '/bg-remover'
   }
 ];
 
@@ -83,7 +92,7 @@ export default function Home() {
               transition={{ delay: idx * 0.1 }}
               className="group relative p-8 bg-surface border border-border rounded-[24px] overflow-hidden cursor-pointer hover:border-purple-500/40 transition-colors"
             >
-              {converter.id === 'text-to-speech' ? (
+              {converter.id === 'text-to-speech' || converter.id === 'bg-remover' ? (
                 <span className="absolute top-6 right-6 px-2.5 py-1 bg-emerald-500/10 border border-emerald-500/20 rounded-md text-[10px] font-bold text-emerald-400 uppercase tracking-wider">
                   NEW
                 </span>
