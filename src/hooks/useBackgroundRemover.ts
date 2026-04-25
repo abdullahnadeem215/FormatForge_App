@@ -1,11 +1,12 @@
+// src/hooks/useBackgroundRemover.ts
 import { useState } from 'react';
+import { Capacitor } from '@capacitor/core';
+import { Filesystem, Directory } from '@capacitor/filesystem';
 
-// Define the plugin interface
 interface BackgroundRemoverPlugin {
   removeBackground(options: { image: string }): Promise<{ result: string }>;
 }
 
-// Extend Capacitor's plugin registry
 declare module '@capacitor/core' {
   interface PluginRegistry {
     BackgroundRemover: BackgroundRemoverPlugin;
@@ -16,18 +17,21 @@ export const useBackgroundRemover = () => {
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [resultPath, setResultPath] = useState<string | null>(null);
-  const [resultBase64, setResultBase64] = useState<string | null>(null);
 
-  const removeBackgroundFromFile = async (imageFile: File): Promise<string> => {
+  const removeBackground = async (imageFile: File): Promise<string> => {
     setIsLoading(true);
     setError(null);
     try {
+      if (!Capacitor.isNativePlatform()) {
+        throw new Error('Background removal is only available on Android');
+      }
+
       const { BackgroundRemover } = Capacitor.Plugins;
       if (!BackgroundRemover) {
         throw new Error('BackgroundRemover plugin not available');
       }
 
-      // Convert the selected file to a base64 string
+      // Convert file to base64 (data URL)
       const base64Data = await new Promise<string>((resolve, reject) => {
         const reader = new FileReader();
         reader.onloadend = () => resolve(reader.result as string);
@@ -35,21 +39,23 @@ export const useBackgroundRemover = () => {
         reader.readAsDataURL(imageFile);
       });
 
-      // Call the native plugin
+      // Call native plugin
       const response = await BackgroundRemover.removeBackground({ image: base64Data });
-      const resultBase64Data = response.result;
-      setResultBase64(resultBase64Data);
+      const resultBase64 = response.result; // Expecting base64 with data URL prefix
 
-      // Save the base64 result to a file (optional)
+      // Save to cache directory
       const fileName = `bg_removed_${Date.now()}.png`;
-      const result = await Filesystem.writeFile({
+      await Filesystem.writeFile({
         path: fileName,
-        data: resultBase64Data,
+        data: resultBase64,
         directory: Directory.Cache,
       });
-
-      setResultPath(result.uri);
-      return result.uri;
+      const fileUri = await Filesystem.getUri({
+        path: fileName,
+        directory: Directory.Cache,
+      });
+      setResultPath(fileUri.uri);
+      return fileUri.uri;
     } catch (err: any) {
       setError(err.message);
       throw err;
@@ -58,11 +64,5 @@ export const useBackgroundRemover = () => {
     }
   };
 
-  return {
-    removeBackground: removeBackgroundFromFile,
-    isLoading,
-    error,
-    resultPath,
-    resultBase64
-  };
+  return { removeBackground, isLoading, error, resultPath };
 };
