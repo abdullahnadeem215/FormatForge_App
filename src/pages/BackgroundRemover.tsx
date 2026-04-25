@@ -2,6 +2,9 @@ import React, { useState } from 'react';
 import { motion } from 'motion/react';
 import { Wand2, Download, Share2, Loader2 } from 'lucide-react';
 import { useBackgroundRemover } from '../hooks/useBackgroundRemover';
+import { Capacitor } from '@capacitor/core';
+import { Share } from '@capacitor/share';
+import { Filesystem, Directory } from '@capacitor/filesystem';
 
 const BackgroundRemover: React.FC = () => {
   const [selectedImage, setSelectedImage] = useState<string | null>(null);
@@ -26,22 +29,69 @@ const BackgroundRemover: React.FC = () => {
     await removeBackground(selectedFile);
   };
 
-  const handleDownload = () => {
-    if (resultPath) {
-      const a = document.createElement('a');
-      a.href = resultPath;
-      a.download = 'background_removed.png';
-      a.click();
+  const downloadAsBlob = async (uri: string, filename: string) => {
+    // For Capacitor native, read file as base64 then create blob
+    if (Capacitor.isNativePlatform()) {
+      const fileData = await Filesystem.readFile({
+        path: uri,
+        directory: Directory.Cache,
+      });
+      const byteCharacters = atob(fileData.data as string);
+      const byteNumbers = new Array(byteCharacters.length);
+      for (let i = 0; i < byteCharacters.length; i++) {
+        byteNumbers[i] = byteCharacters.charCodeAt(i);
+      }
+      const byteArray = new Uint8Array(byteNumbers);
+      const blob = new Blob([byteArray], { type: 'image/png' });
+      const link = document.createElement('a');
+      link.href = URL.createObjectURL(blob);
+      link.download = filename;
+      link.click();
+      URL.revokeObjectURL(link.href);
+    } else {
+      // Web: fetch the file:// uri (should be accessible)
+      const response = await fetch(uri);
+      const blob = await response.blob();
+      const link = document.createElement('a');
+      link.href = URL.createObjectURL(blob);
+      link.download = filename;
+      link.click();
+      URL.revokeObjectURL(link.href);
+    }
+  };
+
+  const handleDownload = async () => {
+    if (!resultPath) return;
+    try {
+      await downloadAsBlob(resultPath, 'background_removed.png');
+    } catch (err) {
+      console.error(err);
+      alert('Download failed: ' + err);
     }
   };
 
   const handleShare = async () => {
-    if (resultPath) {
-      try {
-        await navigator.share({ url: resultPath });
-      } catch {
-        alert('Share not supported or cancelled');
+    if (!resultPath) return;
+    try {
+      if (Capacitor.isNativePlatform() && Share) {
+        await Share.share({
+          title: 'Background Removed Image',
+          url: resultPath,
+        });
+      } else if (navigator.share) {
+        // Web Share API
+        const response = await fetch(resultPath);
+        const blob = await response.blob();
+        const file = new File([blob], 'background_removed.png', { type: 'image/png' });
+        await navigator.share({
+          title: 'Background Removed Image',
+          files: [file],
+        });
+      } else {
+        alert('Share not supported on this browser');
       }
+    } catch (err) {
+      alert('Share failed: ' + err);
     }
   };
 
@@ -58,7 +108,7 @@ const BackgroundRemover: React.FC = () => {
         </div>
         <div>
           <h1 className="text-2xl font-bold">Background Remover</h1>
-          <p className="text-text-dim text-sm">Remove image backgrounds with AI – offline after first download</p>
+          <p className="text-text-dim text-sm">Remove image backgrounds with AI – offline after first use (may take up to 30s)</p>
         </div>
       </div>
 
@@ -90,7 +140,7 @@ const BackgroundRemover: React.FC = () => {
           {isLoading ? (
             <>
               <Loader2 className="w-5 h-5 animate-spin" />
-              Processing...
+              Processing... (may take up to 30s)
             </>
           ) : (
             <>
