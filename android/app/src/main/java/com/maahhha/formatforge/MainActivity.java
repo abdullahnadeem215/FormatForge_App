@@ -1,6 +1,7 @@
 package com.maahhha.formatforge;
 
 import android.os.Bundle;
+import android.util.Log;
 import com.getcapacitor.BridgeActivity;
 import com.getcapacitor.Plugin;
 import com.maahhha.formatforge.app.plugins.TextToSpeechPlugin;
@@ -14,10 +15,10 @@ public class MainActivity extends BridgeActivity {
 
         List<Class<? extends Plugin>> pluginClasses = new ArrayList<>();
         pluginClasses.add(TextToSpeechPlugin.class);
-        // (add other custom plugins here if any)
 
         for (Class<? extends Plugin> pluginClass : pluginClasses) {
             registerPlugin(pluginClass);
+            Log.d("MainActivity", "Registered plugin: " + pluginClass.getSimpleName());
         }
     }
 }
