@@ -1,6 +1,7 @@
 package com.maahhha.formatforge.app.plugins;
 
 import android.speech.tts.TextToSpeech;
+import android.speech.tts.UtteranceProgressListener;
 import android.os.Bundle;
 import android.util.Log;
 import com.getcapacitor.JSObject;
@@ -22,18 +23,14 @@ public class TextToSpeechPlugin extends Plugin {
     @Override
     public void load() {
         Log.d(TAG, "Loading TextToSpeechPlugin");
-        try {
-            tts = new TextToSpeech(getContext(), status -> {
-                if (status == TextToSpeech.SUCCESS) {
-                    Log.d(TAG, "TTS initialized successfully");
-                    tts.setLanguage(Locale.US);
-                } else {
-                    Log.e(TAG, "TTS initialization failed");
-                }
-            });
-        } catch (Exception e) {
-            Log.e(TAG, "Error creating TTS", e);
-        }
+        tts = new TextToSpeech(getContext(), status -> {
+            if (status == TextToSpeech.SUCCESS) {
+                Log.d(TAG, "TTS initialized");
+                tts.setLanguage(Locale.US);
+            } else {
+                Log.e(TAG, "TTS init failed");
+            }
+        });
     }
 
     @PluginMethod
@@ -49,30 +46,33 @@ public class TextToSpeechPlugin extends Plugin {
 
         executor.execute(() -> {
             try {
-                if (tts == null) {
-                    call.reject("TTS not initialized");
-                    return;
-                }
-
                 Locale locale = getLocale(language);
                 tts.setLanguage(locale);
 
                 Bundle params = new Bundle();
                 params.putString(TextToSpeech.Engine.KEY_PARAM_UTTERANCE_ID, "convert");
 
-                File outputFile = new File(outputPath);
-                int result = tts.synthesizeToFile(text, params, outputFile, "convert");
-                
-                if (result == TextToSpeech.SUCCESS) {
-                    JSObject ret = new JSObject();
-                    ret.put("outputPath", outputPath);
-                    call.resolve(ret);
-                } else {
-                    call.reject("Synthesis failed with code: " + result);
+                tts.setOnUtteranceProgressListener(new UtteranceProgressListener() {
+                    @Override
+                    public void onStart(String utteranceId) {}
+                    @Override
+                    public void onDone(String utteranceId) {
+                        JSObject result = new JSObject();
+                        result.put("outputPath", outputPath);
+                        call.resolve(result);
+                    }
+                    @Override
+                    public void onError(String utteranceId) {
+                        call.reject("TTS synthesis failed");
+                    }
+                });
+
+                int result = tts.synthesizeToFile(text, params, new File(outputPath), "convert");
+                if (result != TextToSpeech.SUCCESS) {
+                    call.reject("Failed to start TTS synthesis");
                 }
             } catch (Exception e) {
-                Log.e(TAG, "Convert error", e);
-                call.reject("Error: " + e.getMessage());
+                call.reject("TTS conversion error: " + e.getMessage());
             }
         });
     }
