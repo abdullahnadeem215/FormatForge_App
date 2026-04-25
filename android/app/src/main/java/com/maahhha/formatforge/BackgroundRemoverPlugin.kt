@@ -9,7 +9,6 @@ import com.getcapacitor.Plugin
 import com.getcapacitor.PluginCall
 import com.getcapacitor.PluginMethod
 import com.getcapacitor.annotation.CapacitorPlugin
-import com.ghayas.auto_background_remover.AutoBackgroundRemover
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -37,9 +36,10 @@ class BackgroundRemoverPlugin : Plugin() {
         val appContext: Context = context.applicationContext
         CoroutineScope(Dispatchers.IO).launch {
             try {
-                val result: Bitmap = AutoBackgroundRemover.removeBackground(
-                    bitmap = inputBitmap,
-                    context = appContext
+                // Extension function — no import needed, resolved from the library at runtime
+                val result: Bitmap = inputBitmap.removeBackground(
+                    context = appContext,
+                    trimEmptyPart = false
                 )
                 val out = ByteArrayOutputStream()
                 result.compress(Bitmap.CompressFormat.PNG, 100, out)
