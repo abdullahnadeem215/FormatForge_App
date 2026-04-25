@@ -11,6 +11,7 @@ import com.getcapacitor.Plugin;
 import com.getcapacitor.PluginCall;
 import com.getcapacitor.PluginMethod;
 import com.getcapacitor.annotation.CapacitorPlugin;
+import com.google.mlkit.vision.segmentation.subject.SubjectSegmentation;
 import com.google.mlkit.vision.segmentation.subject.SubjectSegmenter;
 import com.google.mlkit.vision.segmentation.subject.SubjectSegmenterOptions;
 import com.google.mlkit.vision.common.InputImage;
@@ -30,7 +31,7 @@ public class BackgroundRemoverPlugin extends Plugin {
             return;
         }
 
-        // Remove data URL prefix if present
+        // Remove data URL prefix
         String pureBase64 = base64Image.contains(",") ? base64Image.split(",")[1] : base64Image;
         byte[] decodedBytes = Base64.decode(pureBase64, Base64.DEFAULT);
         Bitmap originalBitmap = BitmapFactory.decodeByteArray(decodedBytes, 0, decodedBytes.length);
@@ -40,14 +41,14 @@ public class BackgroundRemoverPlugin extends Plugin {
             return;
         }
 
-        // Process on background thread
         new Thread(() -> {
             try {
                 InputImage inputImage = InputImage.fromBitmap(originalBitmap, 0);
                 SubjectSegmenterOptions options = new SubjectSegmenterOptions.Builder()
                         .enableForegroundBitmap()
                         .build();
-                SubjectSegmenter segmenter = SubjectSegmenter.getClient(options);
+                // ✅ CORRECT: Use SubjectSegmentation.getClient(), not SubjectSegmenter.getClient()
+                SubjectSegmenter segmenter = SubjectSegmentation.getClient(options);
 
                 segmenter.process(inputImage)
                         .addOnSuccessListener(result -> {
@@ -57,7 +58,6 @@ public class BackgroundRemoverPlugin extends Plugin {
                                 return;
                             }
 
-                            // Convert to Base64 data URL
                             ByteArrayOutputStream stream = new ByteArrayOutputStream();
                             foregroundBitmap.compress(Bitmap.CompressFormat.PNG, 100, stream);
                             byte[] bytes = stream.toByteArray();
