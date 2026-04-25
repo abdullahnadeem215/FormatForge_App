@@ -6,21 +6,51 @@ export const useBackgroundRemover = () => {
   const [error, setError] = useState<string | null>(null);
   const [resultPath, setResultPath] = useState<string | null>(null);
 
-  const removeBackground = async (inputPath: string): Promise<string> => {
+  // Resize image to max dimension 800px for faster processing
+  const resizeImage = (file: File): Promise<Blob> => {
+    return new Promise((resolve, reject) => {
+      const img = new Image();
+      img.onload = () => {
+        const maxDim = 800;
+        let width = img.width;
+        let height = img.height;
+        if (width > height && width > maxDim) {
+          height = (height * maxDim) / width;
+          width = maxDim;
+        } else if (height > maxDim) {
+          width = (width * maxDim) / height;
+          height = maxDim;
+        }
+        const canvas = document.createElement('canvas');
+        canvas.width = width;
+        canvas.height = height;
+        const ctx = canvas.getContext('2d');
+        ctx?.drawImage(img, 0, 0, width, height);
+        canvas.toBlob((blob) => {
+          if (blob) resolve(blob);
+          else reject(new Error('Canvas to blob failed'));
+        }, 'image/png');
+      };
+      img.onerror = reject;
+      img.src = URL.createObjectURL(file);
+    });
+  };
+
+  const removeBackground = async (inputFile: File): Promise<string> => {
     setIsLoading(true);
     setError(null);
     try {
-      // Dynamically import the library (only when needed)
+      // Resize for speed
+      const resizedBlob = await resizeImage(inputFile);
       const { removeBackground } = await import('@imgly/background-removal');
-      // Load the image blob
-      const response = await fetch(inputPath);
-      const imageBlob = await response.blob();
-      // Process the image
-      const resultBlob = await removeBackground(imageBlob);
-      // Save the result blob to a local file
-      const timestamp = Date.now();
-      const fileName = `bg_removed_${timestamp}.png`;
-      const base64 = await blobToBase64(resultBlob);
+      const resultBlob = await removeBackground(resizedBlob);
+      const fileName = `bg_removed_${Date.now()}.png`;
+      const reader = new FileReader();
+      const base64 = await new Promise<string>((resolve, reject) => {
+        reader.onloadend = () => resolve(reader.result as string);
+        reader.onerror = reject;
+        reader.readAsDataURL(resultBlob);
+      });
       const result = await Filesystem.writeFile({
         path: fileName,
         data: base64,
@@ -34,16 +64,6 @@ export const useBackgroundRemover = () => {
     } finally {
       setIsLoading(false);
     }
-  };
-
-  // Helper: Blob -> base64
-  const blobToBase64 = (blob: Blob): Promise<string> => {
-    return new Promise((resolve, reject) => {
-      const reader = new FileReader();
-      reader.onloadend = () => resolve(reader.result as string);
-      reader.onerror = reject;
-      reader.readAsDataURL(blob);
-    });
   };
 
   return { removeBackground, isLoading, error, resultPath };
