@@ -1,4 +1,3 @@
-// BackgroundRemoverPlugin.kt
 package com.maahhha.formatforge.plugins
 
 import android.graphics.Bitmap
@@ -18,36 +17,45 @@ class BackgroundRemoverPlugin : Plugin() {
 
     @PluginMethod
     fun removeBackground(call: PluginCall) {
-        val base64Image = call.getString("image") ?: return call.reject("No image provided")
+        val imageData = call.getString("image") ?: return call.reject("No image provided")
 
-        // Decode the base64 string to a Bitmap
-        val imageBytes = Base64.decode(base64Image.substringAfter(","), Base64.DEFAULT)
+        // Strip data URL prefix if present (e.g., "data:image/png;base64,")
+        val base64String = if (imageData.contains(",")) {
+            imageData.substringAfter(",")
+        } else {
+            imageData
+        }
+
+        val imageBytes = Base64.decode(base64String, Base64.DEFAULT)
         val originalBitmap = BitmapFactory.decodeByteArray(imageBytes, 0, imageBytes.size)
 
         if (originalBitmap == null) {
-            return call.reject("Failed to decode image")
+            call.reject("Failed to decode image")
+            return
         }
 
-        // Run the background removal on a background thread (Dispatchers.IO)
         scope.launch(Dispatchers.IO) {
             try {
-                val resultBitmap = originalBitmap.removeBackground( context = bridge.context, trimEmptyPart = true)
+                // Call the library's extension function
+                val resultBitmap = originalBitmap.removeBackground(
+                    context = bridge.context,
+                    trimEmptyPart = true
+                )
 
-                // Encode the result bitmap back to base64
                 val resultBase64 = bitmapToBase64(resultBitmap)
+                val finalBase64 = "data:image/png;base64,$resultBase64"
 
-                // Send the result back to the JavaScript side
                 withContext(Dispatchers.Main) {
                     val result = JSObject()
-                    result.put("result", resultBase64)
+                    result.put("result", finalBase64)
                     call.resolve(result)
                 }
+                originalBitmap.recycle()
+                resultBitmap.recycle()
             } catch (e: Exception) {
                 withContext(Dispatchers.Main) {
                     call.reject("Background removal failed: ${e.message}")
                 }
-            } finally {
-                originalBitmap.recycle()
             }
         }
     }
