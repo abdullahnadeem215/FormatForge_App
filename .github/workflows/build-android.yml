@@ -30,7 +30,6 @@ jobs:
       - name: Install Capacitor and plugins
         run: |
           npm install @capacitor/core @capacitor/cli @capacitor/android --legacy-peer-deps
-          npm install @capacitor-mlkit/subject-segmentation@latest --legacy-peer-deps
           npm install @capacitor-mlkit/selfie-segmentation@latest --legacy-peer-deps
           npm install @capacitor-community/text-to-speech --legacy-peer-deps  # if still needed
 
