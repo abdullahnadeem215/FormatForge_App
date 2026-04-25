@@ -22,7 +22,7 @@ jobs:
         uses: actions/setup-java@v4
         with:
           distribution: 'temurin'
-          java-version: '21'
+          java-version: '17'     # Use 17 (compatible with Capacitor)
 
       - name: Install dependencies
         run: npm install
@@ -30,11 +30,14 @@ jobs:
       - name: Build web app
         run: npm run build
 
-      - name: Install Capacitor
+      - name: Install Capacitor and plugins
         run: |
           npm install @capacitor/core @capacitor/cli @capacitor/android
+          npm install @capacitor-community/text-to-speech
+
       - name: Copy web build to Android
         run: npx cap copy
+
       - name: Sync Capacitor
         run: npx cap sync
 
