@@ -13,7 +13,8 @@
     "lint": "tsc --noEmit"
   },
   "dependencies": {
-    "@capacitor-mlkit/subject-segmentation": "^1.0.0",
+    "@capacitor-mlkit/subject-segmentation": "^7.2.1",
+    "@capacitor-community/text-to-speech": "^5.0.0",
     "@adobe/pdfservices-node-sdk": "^3.4.1",
     "@capacitor/android": "^8.3.1",
     "@capacitor/core": "^8.3.1",
