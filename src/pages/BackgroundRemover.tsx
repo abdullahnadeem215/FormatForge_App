@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { motion } from 'motion/react';
-import { Wand2, Image as ImageIcon, Download, Share2, Loader2 } from 'lucide-react';
+import { Wand2, Download, Share2, Loader2 } from 'lucide-react';
 import { useBackgroundRemover } from '../hooks/useBackgroundRemover';
 
 const BackgroundRemover: React.FC = () => {
@@ -23,13 +23,11 @@ const BackgroundRemover: React.FC = () => {
       alert('Please select an image first');
       return;
     }
-    const fileUrl = URL.createObjectURL(selectedFile);
-    await removeBackground(fileUrl);
+    await removeBackground(selectedFile);
   };
 
   const handleDownload = () => {
     if (resultPath) {
-      // In a web environment, we can trigger download. On native, we'd use Filesystem.
       const a = document.createElement('a');
       a.href = resultPath;
       a.download = 'background_removed.png';
@@ -41,7 +39,7 @@ const BackgroundRemover: React.FC = () => {
     if (resultPath) {
       try {
         await navigator.share({ url: resultPath });
-      } catch (err) {
+      } catch {
         alert('Share not supported or cancelled');
       }
     }
