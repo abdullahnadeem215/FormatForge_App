@@ -13,7 +13,7 @@ import java.io.File;
 import java.util.Locale;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
-
+import android.widget.Toast;
 @CapacitorPlugin(name = "TextToSpeech")
 public class TextToSpeechPlugin extends Plugin {
     private static final String TAG = "TextToSpeechPlugin";
@@ -31,6 +31,8 @@ public class TextToSpeechPlugin extends Plugin {
                 Log.e(TAG, "TTS init failed");
             }
         });
+        // inside load():
+        Toast.makeText(getContext(), "TextToSpeech plugin loaded", Toast.LENGTH_SHORT).show();
     }
 
     @PluginMethod
