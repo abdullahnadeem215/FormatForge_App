@@ -1,5 +1,6 @@
 package com.maahhha.formatforge
 
+import android.content.Context
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import android.util.Base64
@@ -8,6 +9,7 @@ import com.getcapacitor.Plugin
 import com.getcapacitor.PluginCall
 import com.getcapacitor.PluginMethod
 import com.getcapacitor.annotation.CapacitorPlugin
+import com.ghayas.auto_background_remover.AutoBackgroundRemover
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -24,7 +26,7 @@ class BackgroundRemoverPlugin : Plugin() {
             return
         }
         if (base64Image.contains(",")) {
-            base64Image = base64Image.substringAfter(",")
+            base64Image = base64Image.split(",")[1]
         }
         val bytes = Base64.decode(base64Image, Base64.DEFAULT)
         val inputBitmap = BitmapFactory.decodeByteArray(bytes, 0, bytes.size)
@@ -32,11 +34,12 @@ class BackgroundRemoverPlugin : Plugin() {
             call.reject("Failed to decode image")
             return
         }
+        val appContext: Context = context.applicationContext
         CoroutineScope(Dispatchers.IO).launch {
             try {
-                val result: Bitmap = inputBitmap.removeBackground(
-                    context = context,
-                    trimEmptyPart = false
+                val result: Bitmap = AutoBackgroundRemover.removeBackground(
+                    bitmap = inputBitmap,
+                    context = appContext
                 )
                 val out = ByteArrayOutputStream()
                 result.compress(Bitmap.CompressFormat.PNG, 100, out)
