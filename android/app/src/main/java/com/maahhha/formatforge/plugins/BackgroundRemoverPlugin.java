@@ -3,23 +3,23 @@ package com.maahhha.formatforge.plugins;
 import android.graphics.Bitmap;
 import android.graphics.BitmapFactory;
 import android.util.Base64;
-import android.os.Handler;
-import android.os.Looper;
 
 import com.getcapacitor.JSObject;
 import com.getcapacitor.Plugin;
 import com.getcapacitor.PluginCall;
 import com.getcapacitor.PluginMethod;
 import com.getcapacitor.annotation.CapacitorPlugin;
-import com.ghayas.auto_background_remover.PhotoEditor;
 
 import java.io.ByteArrayOutputStream;
 
+import kotlinx.coroutines.BuildersKt;
+import kotlinx.coroutines.Dispatchers;
+
+// Import the Kotlin extension function via its generated class
+import com.ghayas.autobackgroundremover.AutoBackgroundRemoverKt;
+
 @CapacitorPlugin(name = "BackgroundRemover")
 public class BackgroundRemoverPlugin extends Plugin {
-
-    // Handler for the main thread
-    private final Handler mainHandler = new Handler(Looper.getMainLooper());
 
     @PluginMethod
     public void removeBackground(PluginCall call) {
@@ -29,51 +29,49 @@ public class BackgroundRemoverPlugin extends Plugin {
             return;
         }
 
-        // 1. Remove the data URL prefix (e.g., "data:image/png;base64,") to get the pure Base64 string
-        String pureBase64 = base64Image.contains(",") ? base64Image.split(",")[1] : base64Image;
+        // Strip data URI prefix if present
+        if (base64Image.contains(",")) {
+            base64Image = base64Image.split(",")[1];
+        }
 
-        // 2. Decode Base64 string to a Bitmap
-        byte[] decodedBytes = Base64.decode(pureBase64, Base64.DEFAULT);
-        Bitmap originalBitmap = BitmapFactory.decodeByteArray(decodedBytes, 0, decodedBytes.length);
+        byte[] decodedBytes = Base64.decode(base64Image, Base64.DEFAULT);
+        Bitmap inputBitmap = BitmapFactory.decodeByteArray(decodedBytes, 0, decodedBytes.length);
 
-        if (originalBitmap == null) {
+        if (inputBitmap == null) {
             call.reject("Failed to decode image");
             return;
         }
 
-        // 3. Run the heavy background removal task on a background thread
-        new Thread(() -> {
-            try {
-                // Call the library's removeBackground function
-                // Note: The library uses Kotlin coroutines; we use runBlocking to bridge the gap.
-                // This is a common technique when calling Kotlin suspend functions from Java.
-                Bitmap resultBitmap = PhotoEditor.removeBackground(
-                    getContext().getApplicationContext(),
-                    originalBitmap,
-                    true // trimEmptyPart
-                );
+        final Bitmap finalBitmap = inputBitmap;
 
-                // 4. Encode the result Bitmap back to Base64
-                ByteArrayOutputStream outputStream = new ByteArrayOutputStream();
-                resultBitmap.compress(Bitmap.CompressFormat.PNG, 100, outputStream);
-                byte[] resultBytes = outputStream.toByteArray();
-                String resultBase64 = Base64.encodeToString(resultBytes, Base64.DEFAULT);
-                String finalBase64 = "data:image/png;base64," + resultBase64;
+        // Run on IO dispatcher using coroutines
+        kotlinx.coroutines.CoroutineScope scope =
+            new kotlinx.coroutines.CoroutineScope(Dispatchers.getIO());
 
-                // 5. Return the result on the main thread
-                mainHandler.post(() -> {
-                    JSObject result = new JSObject();
-                    result.put("result", finalBase64);
-                    call.resolve(result);
-                });
+        BuildersKt.launch(scope, Dispatchers.getIO(),
+            kotlinx.coroutines.CoroutineStart.DEFAULT,
+            (coroutineScope, continuation) -> {
+                try {
+                    Bitmap result = AutoBackgroundRemoverKt.removeBackground(
+                        finalBitmap,
+                        getContext(),
+                        false  // trimEmptyPart = false
+                    );
 
-                // Clean up bitmaps
-                originalBitmap.recycle();
-                resultBitmap.recycle();
-            } catch (Exception e) {
-                // If there's an error, return it on the main thread
-                mainHandler.post(() -> call.reject("Background removal failed: " + e.getMessage()));
+                    ByteArrayOutputStream outputStream = new ByteArrayOutputStream();
+                    result.compress(Bitmap.CompressFormat.PNG, 100, outputStream);
+                    String resultBase64 = Base64.encodeToString(
+                        outputStream.toByteArray(), Base64.DEFAULT
+                    );
+
+                    JSObject ret = new JSObject();
+                    ret.put("image", "data:image/png;base64," + resultBase64);
+                    call.resolve(ret);
+                } catch (Exception e) {
+                    call.reject("Background removal failed: " + e.getMessage());
+                }
+                return null;
             }
-        }).start();
+        );
     }
 }
