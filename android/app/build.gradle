@@ -16,6 +16,9 @@ android {
             ignoreAssetsPattern = '!.svn:!.git:!.ds_store:!*.scc:.*:!CVS:!thumbs.db:!picasa.ini:!*~'
         }
     }
+     kotlinOptions {
+        jvmTarget = '21'
+    }
     buildTypes {
         release {
             minifyEnabled false
