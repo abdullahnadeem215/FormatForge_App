@@ -1,4 +1,4 @@
-package com.maahhha.formatforge.plugins
+package com.maahhha.formatforge
 
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
@@ -23,18 +23,15 @@ class BackgroundRemoverPlugin : Plugin() {
             call.reject("No image provided")
             return
         }
-
         if (base64Image.contains(",")) {
             base64Image = base64Image.substringAfter(",")
         }
-
         val bytes = Base64.decode(base64Image, Base64.DEFAULT)
         val inputBitmap = BitmapFactory.decodeByteArray(bytes, 0, bytes.size)
         if (inputBitmap == null) {
             call.reject("Failed to decode image")
             return
         }
-
         CoroutineScope(Dispatchers.IO).launch {
             try {
                 val result: Bitmap = inputBitmap.removeBackground(
@@ -44,7 +41,6 @@ class BackgroundRemoverPlugin : Plugin() {
                 val out = ByteArrayOutputStream()
                 result.compress(Bitmap.CompressFormat.PNG, 100, out)
                 val resultBase64 = Base64.encodeToString(out.toByteArray(), Base64.DEFAULT)
-
                 val ret = JSObject()
                 ret.put("image", "data:image/png;base64,$resultBase64")
                 call.resolve(ret)
