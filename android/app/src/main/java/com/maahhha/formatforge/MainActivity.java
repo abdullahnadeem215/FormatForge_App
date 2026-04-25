@@ -2,11 +2,22 @@ package com.maahhha.formatforge;
 
 import android.os.Bundle;
 import com.getcapacitor.BridgeActivity;
+import com.getcapacitor.Plugin;
+import com.getcapacitor.community.mlkit.subjectsegmentation.SubjectSegmentationPlugin;
+import java.util.ArrayList;
+import java.util.List;
 
 public class MainActivity extends BridgeActivity {
     @Override
     public void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
-        // No manual registration needed. Capacitor auto-discovers installed plugins.
+
+        List<Class<? extends Plugin>> pluginClasses = new ArrayList<>();
+        pluginClasses.add(SubjectSegmentationPlugin.class);
+        // (other plugins if any)
+
+        for (Class<? extends Plugin> pluginClass : pluginClasses) {
+            registerPlugin(pluginClass);
+        }
     }
 }
