@@ -1,9 +1,9 @@
 package com.maahhha.formatforge
 
-import android.content.Context
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import android.util.Base64
+import com.appcent.android.removebg.RemoveBg
 import com.getcapacitor.JSObject
 import com.getcapacitor.Plugin
 import com.getcapacitor.PluginCall
@@ -11,6 +11,7 @@ import com.getcapacitor.PluginMethod
 import com.getcapacitor.annotation.CapacitorPlugin
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import java.io.ByteArrayOutputStream
 
@@ -33,17 +34,16 @@ class BackgroundRemoverPlugin : Plugin() {
             call.reject("Failed to decode image")
             return
         }
-        val appContext: Context = context.applicationContext
+
         CoroutineScope(Dispatchers.IO).launch {
             try {
-                // Extension function — no import needed, resolved from the library at runtime
-                val result: Bitmap = inputBitmap.removeBackground(
-                    context = appContext,
-                    trimEmptyPart = false
-                )
+                val remover = RemoveBg(context)
+                val result: Bitmap = remover.clearBackground(inputBitmap).first()
+
                 val out = ByteArrayOutputStream()
                 result.compress(Bitmap.CompressFormat.PNG, 100, out)
                 val resultBase64 = Base64.encodeToString(out.toByteArray(), Base64.DEFAULT)
+
                 val ret = JSObject()
                 ret.put("image", "data:image/png;base64,$resultBase64")
                 call.resolve(ret)
