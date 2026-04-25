@@ -1,4 +1,3 @@
-// src/hooks/useBackgroundRemover.ts
 import { useState } from 'react';
 import { Capacitor } from '@capacitor/core';
 import { Filesystem, Directory } from '@capacitor/filesystem';
@@ -16,13 +15,7 @@ export const useBackgroundRemover = () => {
         throw new Error('Background removal is only available on Android');
       }
 
-      // @ts-ignore - Capacitor plugins are available at runtime
-      const { BackgroundRemover } = (Capacitor as any).Plugins;
-      if (!BackgroundRemover) {
-        throw new Error('BackgroundRemover plugin not available');
-      }
-
-      // Convert file to base64 data URL
+      // 1. Convert the selected file to a Base64 string
       const base64Data = await new Promise<string>((resolve, reject) => {
         const reader = new FileReader();
         reader.onloadend = () => resolve(reader.result as string);
@@ -30,22 +23,23 @@ export const useBackgroundRemover = () => {
         reader.readAsDataURL(imageFile);
       });
 
-      // Call native plugin – expects base64 string (may include data: prefix)
+      // 2. Call the native plugin
+      // @ts-ignore - Capacitor plugins are available at runtime
+      const { BackgroundRemover } = Capacitor.Plugins;
+      if (!BackgroundRemover) {
+        throw new Error('BackgroundRemover plugin not available');
+      }
       const response = await BackgroundRemover.removeBackground({ image: base64Data });
-      const resultBase64 = response.result; // Should be a data URL or raw base64
+      const resultBase64 = response.result;
 
-      // Ensure it starts with data:image to be valid for Filesystem
-      const finalBase64 = resultBase64.startsWith('data:') 
-        ? resultBase64 
-        : `data:image/png;base64,${resultBase64}`;
-
-      // Save to cache directory
+      // 3. Save the result Base64 string to a file
       const fileName = `bg_removed_${Date.now()}.png`;
       await Filesystem.writeFile({
         path: fileName,
-        data: finalBase64,
+        data: resultBase64,
         directory: Directory.Cache,
       });
+
       const fileUri = await Filesystem.getUri({
         path: fileName,
         directory: Directory.Cache,
