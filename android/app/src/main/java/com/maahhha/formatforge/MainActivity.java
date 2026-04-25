@@ -14,7 +14,7 @@ public class MainActivity extends BridgeActivity {
 
         List<Class<? extends Plugin>> pluginClasses = new ArrayList<>();
         pluginClasses.add(SelfieSegmentation.class);
-        // Add other plugins if needed
+        // ... other plugins if any
 
         for (Class<? extends Plugin> pluginClass : pluginClasses) {
             registerPlugin(pluginClass);
