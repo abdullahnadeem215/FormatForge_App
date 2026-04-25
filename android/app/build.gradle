@@ -1,7 +1,7 @@
-    plugins {
-        id 'com.android.application'
-        id 'kotlin-android'          // ← must be present
-    }
+plugins {
+    id 'com.android.application'
+    id 'org.jetbrains.kotlin.android'    // ← change from 'kotlin-android' to this
+}
 
 android {
     namespace = "com.maahhha.formatforge"
@@ -24,7 +24,9 @@ android {
         targetCompatibility JavaVersion.VERSION_17
     }
 
-
+    kotlinOptions {
+        jvmTarget = '17'    // ← ADD THIS BLOCK
+    }
     buildTypes {
         release {
             minifyEnabled false
