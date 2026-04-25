@@ -1,7 +1,7 @@
 package com.maahhha.formatforge;
 
 import android.os.Bundle;
-import android.util.Log;
+import android.widget.Toast;
 import com.getcapacitor.BridgeActivity;
 import com.getcapacitor.Plugin;
 import com.maahhha.formatforge.app.plugins.TextToSpeechPlugin;
@@ -18,7 +18,9 @@ public class MainActivity extends BridgeActivity {
 
         for (Class<? extends Plugin> pluginClass : pluginClasses) {
             registerPlugin(pluginClass);
-            Log.d("MainActivity", "Registered plugin: " + pluginClass.getSimpleName());
         }
+
+        // Show a toast to confirm the plugin was registered (visible on app start)
+        Toast.makeText(this, "TextToSpeechPlugin registered", Toast.LENGTH_SHORT).show();
     }
 }
