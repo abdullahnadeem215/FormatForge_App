@@ -4,10 +4,8 @@ import {
   Image as ImageIcon, 
   Music, 
   Video, 
-  FileText, 
-  ArrowRight,
   Zap,
-  Mic                      // ✅ NEW icon
+  Mic
 } from 'lucide-react';
 import { Link } from 'react-router-dom';
 
@@ -37,19 +35,9 @@ const converters = [
     path: '/convert/video-to-audio'
   },
   {
-    id: 'document',
-    title: 'Document Pro',
-    description: 'AI-powered PDF to Word with layout preservation.',
-    icon: <FileText className="w-8 h-8" />,
-    color: 'from-orange-500 to-amber-500',
-    isAI: true,
-    path: '/convert/document'
-  },
-  // ✅ NEW: Text to Speech card
-  {
     id: 'text-to-speech',
     title: 'Text to Speech',
-    description: 'Convert any text to MP3 audio – 100% offline.',
+    description: 'Convert any text to speech – 100% offline.',
     icon: <Mic className="w-8 h-8" />,
     color: 'from-emerald-500 to-teal-500',
     path: '/text-to-speech'
@@ -95,11 +83,7 @@ export default function Home() {
               transition={{ delay: idx * 0.1 }}
               className="group relative p-8 bg-surface border border-border rounded-[24px] overflow-hidden cursor-pointer hover:border-purple-500/40 transition-colors"
             >
-              {converter.isAI ? (
-                <span className="absolute top-6 right-6 px-2.5 py-1 bg-purple-500/10 border border-purple-500/20 rounded-md text-[10px] font-bold text-purple-400 uppercase tracking-wider">
-                  PDF-TO-DOCX
-                </span>
-              ) : converter.id === 'text-to-speech' ? (
+              {converter.id === 'text-to-speech' ? (
                 <span className="absolute top-6 right-6 px-2.5 py-1 bg-emerald-500/10 border border-emerald-500/20 rounded-md text-[10px] font-bold text-emerald-400 uppercase tracking-wider">
                   NEW
                 </span>
@@ -122,7 +106,7 @@ export default function Home() {
                 </div>
 
                 <button className="w-full py-2.5 bg-accent-grad border-none rounded-lg text-white font-semibold text-sm cursor-pointer">
-                  {converter.isAI ? 'Start AI Conversion' : 'Open Converter'}
+                  Open Converter
                 </button>
               </div>
             </motion.div>
