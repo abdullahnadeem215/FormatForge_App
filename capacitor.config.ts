@@ -9,6 +9,9 @@ const config: CapacitorConfig = {
     allowNavigation: ['http://localhost:8080']
   },
   plugins: {
+    TextToSpeech: {
+    // any config if needed, empty is fine
+    },
     SplashScreen: {
       launchShowDuration: 0,  // Set to 0 to disable
       launchAutoHide: true,
