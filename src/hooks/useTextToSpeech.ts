@@ -2,19 +2,29 @@ import { useState } from 'react';
 import { Capacitor } from '@capacitor/core';
 import { Filesystem, Directory } from '@capacitor/filesystem';
 
+// Tell TypeScript about our plugin (optional but clean)
+declare module '@capacitor/core' {
+  interface PluginRegistry {
+    TextToSpeech: {
+      convert(options: { text: string; language: string; outputPath: string }): Promise<{ outputPath: string }>;
+    };
+  }
+}
+
 export const useTextToSpeech = () => {
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [outputPath, setOutputPath] = useState<string | null>(null);
 
   const getPlugin = () => {
-    // @ts-ignore - Capacitor plugins are available at runtime
-    const plugin = Capacitor.Plugins?.TextToSpeech;
+    // Safe cast – Capacitor.Plugins exists at runtime
+    const plugins = (Capacitor as any).Plugins;
+    const plugin = plugins?.TextToSpeech;
     if (!plugin) {
-      const available = Object.keys(Capacitor.Plugins || {});
+      const available = Object.keys(plugins || {});
       throw new Error(`TextToSpeech plugin not found. Available plugins: ${available.join(', ')}`);
     }
-    return plugin;
+    return plugin as typeof plugins.TextToSpeech;
   };
 
   const convert = async (text: string, language: string) => {
