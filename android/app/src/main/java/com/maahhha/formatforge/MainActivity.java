@@ -13,7 +13,7 @@ public class MainActivity extends BridgeActivity {
         super.onCreate(savedInstanceState);
         
         List<Class<? extends Plugin>> pluginClasses = new ArrayList<>();
-        pluginClasses.add(TextToSpeechPlugin.class);
+        // pluginClasses.add(TextToSpeechPlugin.class);
         // ... any other plugins you may have
         
         for (Class<? extends Plugin> pluginClass : pluginClasses) {
