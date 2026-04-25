@@ -27,9 +27,11 @@ jobs:
       - name: Install dependencies
         run: npm install
 
-      - name: Install Capacitor plugins
+      - name: Install Capacitor and plugins
         run: |
-          npm install @capacitor-mlkit/subject-segmentation
+          npm install @capacitor/core @capacitor/cli @capacitor/android
+          npm install @capacitor-community/text-to-speech
+          npm install @capacitor-mlkit/subject-segmentation@^7.2.1
 
       - name: Build web app
         run: npm run build
