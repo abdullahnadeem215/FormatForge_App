@@ -32,13 +32,10 @@ jobs:
 
       - name: Install Capacitor
         run: |
-          npm install @capacitor/core @capacitor/cli @capacitor/android
+          npm install @capacitor/core @capacitor/cli @capacitor/android @capacitor-community/text-to-speech
 
       - name: Copy web build to Android
         run: npx cap copy
-      - name: Clean Capacitor
-        run: |
-          npx cap sync android --clean
       - name: Sync Capacitor
         run: npx cap sync
 
