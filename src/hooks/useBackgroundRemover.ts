@@ -1,49 +1,42 @@
+// src/hooks/useBackgroundRemover.ts
 import { useState } from 'react';
 import { SubjectSegmentation } from '@capacitor-mlkit/subject-segmentation';
 import { Filesystem, Directory } from '@capacitor/filesystem';
-import { Capacitor } from '@capacitor/core';
 
 export const useBackgroundRemover = () => {
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [resultPath, setResultPath] = useState<string | null>(null);
 
-  const removeBackground = async (inputFile: File): Promise<string> => {
+  const removeBackground = async (imageFile: File): Promise<string> => {
     setIsLoading(true);
     setError(null);
     try {
-      if (!Capacitor.isNativePlatform()) {
-        throw new Error('Background removal is only available on Android');
-      }
-
-      // Convert File to base64
+      // Convert file to base64
       const base64 = await new Promise<string>((resolve, reject) => {
         const reader = new FileReader();
         reader.onloadend = () => resolve(reader.result as string);
         reader.onerror = reject;
-        reader.readAsDataURL(inputFile);
+        reader.readAsDataURL(imageFile);
       });
 
-      // Call ML Kit plugin
-      const { result } = await SubjectSegmentation.processImage({
-        image: { path: base64 },
+      // Call the plugin's segment method
+      const { foregroundBitmap } = await SubjectSegmentation.segment({
+        image: { base64Image: base64 },
       });
 
-      const foregroundBitmap = result.foregroundBitmap;
-      if (!foregroundBitmap) {
-        throw new Error('No foreground bitmap returned');
-      }
+      if (!foregroundBitmap) throw new Error('No foreground bitmap returned');
 
-      // Save result
       const fileName = `bg_removed_${Date.now()}.png`;
-      const writeResult = await Filesystem.writeFile({
+      await Filesystem.writeFile({
         path: fileName,
-        data: foregroundBitmap,
+        data: foregroundBitmap, // already base64 with prefix
         directory: Directory.Cache,
       });
 
-      setResultPath(writeResult.uri);
-      return writeResult.uri;
+      const fileUri = await Filesystem.getUri({ directory: Directory.Cache, path: fileName });
+      setResultPath(fileUri.uri);
+      return fileUri.uri;
     } catch (err: any) {
       setError(err.message);
       throw err;
