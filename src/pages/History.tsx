@@ -18,7 +18,6 @@ import { deleteConversion } from '../utils/storage';
 import { getFileBlob } from '../utils/db';
 import { saveAs } from 'file-saver';
 import { Filesystem, Directory } from '@capacitor/filesystem';
-import { Share } from '@capacitor/share';
 import { Capacitor } from '@capacitor/core';
 
 export default function HistoryPage() {
@@ -44,7 +43,7 @@ export default function HistoryPage() {
         try {
           const base64 = (reader.result as string).split(',')[1];
           
-          const result = await Filesystem.writeFile({
+          await Filesystem.writeFile({
             path: fileName,
             data: base64,
             directory: Directory.Documents
@@ -52,13 +51,8 @@ export default function HistoryPage() {
           
           alert(`✅ File successfully saved to your Documents folder as:\n${fileName}`);
 
-          await Share.share({
-            title: 'Save File',
-            text: 'Here is your converted file.',
-            url: result.uri 
-          });
         } catch (err) {
-          console.error('Filesystem/Share error:', err);
+          console.error('Filesystem error:', err);
           alert('Failed to save file. Please check storage permissions.');
         }
       };
