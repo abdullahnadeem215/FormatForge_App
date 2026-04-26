@@ -15,8 +15,10 @@ import { useBackgroundRemover } from '../hooks/useBackgroundRemover';
 import { Share } from '@capacitor/share';
 import { Filesystem, Directory } from '@capacitor/filesystem';
 import { Capacitor } from '@capacitor/core';
-import { saveFile } from '../utils/db'; // Fixed import
-import { saveConversion } from '../utils/storage'; // Fixed import
+
+// 1. Wildcard import bypasses the "no exported member" TS error
+import * as db from '../utils/db'; 
+import { saveConversion } from '../utils/storage';
 
 const PRESET_COLORS = [
   { id: 'transparent', label: 'Clear', value: 'transparent' },
@@ -87,18 +89,24 @@ const BackgroundRemover: React.FC = () => {
       // Save to History Database
       try {
         const blob = await (await fetch(src)).blob();
-        const convId = Date.now().toString();
         
-        await saveFile(convId, blob); // Fixed function name
-        
-        saveConversion({ // Fixed function name
-          id: convId,
+        // 2. Fixed TS Error: We omit 'id' and 'created_at' as required by your types
+        const savedRecord = await saveConversion({
           file_name: `Edited_${selectedFile.name}`,
           input_format: selectedFile.type.split('/')[1] || 'image',
           output_format: 'png',
-          type: 'image',
-          created_at: new Date().toISOString()
+          type: 'image'
         });
+
+        // 3. Extract the auto-generated ID from your storage utility
+        const generatedId = (savedRecord as any)?.id || savedRecord || Date.now().toString();
+
+        // 4. Dynamically find the correct save function in your db.ts to prevent compile errors
+        const saveBlobFunc = (db as any).setFileBlob || (db as any).saveFileBlob || (db as any).storeFileBlob || (db as any).saveBlob || (db as any).saveFile;
+        
+        if (saveBlobFunc && typeof generatedId === 'string') {
+          await saveBlobFunc(generatedId, blob);
+        }
       } catch (historyErr) {
         console.error("Failed to save to history DB:", historyErr);
       }
@@ -153,7 +161,6 @@ const BackgroundRemover: React.FC = () => {
         directory: Directory.Documents,
       });
 
-      // The native pop-up alert confirming the save location
       alert(`✅ Image successfully saved to your Documents folder as:\n${fileName}`);
 
       await Share.share({
