@@ -4,16 +4,12 @@ const config: CapacitorConfig = {
   appId: 'com.maahhha.formatforge',
   appName: 'FormatForge Pro',
   webDir: 'dist',
-  server: {
-    cleartext: true,
-    allowNavigation: ['http://localhost:8080']
-  },
   plugins: {
-    TextToSpeech: {
-    // any config if needed, empty is fine
+    BackgroundRemover: {
+      // No config needed – presence ensures inclusion
     },
     SplashScreen: {
-      launchShowDuration: 0,  // Set to 0 to disable
+      launchShowDuration: 0,
       launchAutoHide: true,
       showSpinner: false
     }
