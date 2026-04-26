@@ -36,7 +36,7 @@ const BackgroundRemover: React.FC = () => {
     if (!selectedFile) return;
     try {
       const path = await removeBackground(selectedFile);
-      // Read result file to show preview
+      // Read fixed result for preview
       try {
         const fileData = await Filesystem.readFile({
           path,
@@ -48,7 +48,6 @@ const BackgroundRemover: React.FC = () => {
           : `data:image/png;base64,${base64}`;
         setResultImage(src);
       } catch {
-        // Path may be absolute — try reading without directory
         const fileData = await Filesystem.readFile({ path });
         const base64 = fileData.data as string;
         const src = base64.startsWith('data:')
@@ -57,7 +56,7 @@ const BackgroundRemover: React.FC = () => {
         setResultImage(src);
       }
     } catch {
-      // error is already set in the hook
+      // error already set in hook
     }
   };
 
@@ -128,7 +127,6 @@ const BackgroundRemover: React.FC = () => {
                 alt="Selected"
                 className="w-full max-h-72 object-contain"
               />
-              {/* Hover overlay hint */}
               <div className="absolute inset-0 bg-black/40 opacity-0 hover:opacity-100 transition flex items-center justify-center">
                 <p className="text-white text-sm font-medium flex items-center gap-2">
                   <Upload className="w-4 h-4" /> Change image
@@ -187,11 +185,9 @@ const BackgroundRemover: React.FC = () => {
             ) : (
               <AlertCircle className="w-5 h-5 text-red-400 shrink-0 mt-0.5" />
             )}
-            <p
-              className={`text-sm leading-relaxed ${
-                isDownloading ? 'text-yellow-300' : 'text-red-400'
-              }`}
-            >
+            <p className={`text-sm leading-relaxed ${
+              isDownloading ? 'text-yellow-300' : 'text-red-400'
+            }`}>
               {error}
             </p>
           </motion.div>
@@ -213,7 +209,7 @@ const BackgroundRemover: React.FC = () => {
               Background removed successfully
             </div>
 
-            {/* Checkerboard bg to show transparency */}
+            {/* Checkerboard to show transparency */}
             <div
               className="rounded-2xl overflow-hidden border border-border"
               style={{
