@@ -15,8 +15,6 @@ import { useBackgroundRemover } from '../hooks/useBackgroundRemover';
 import { Share } from '@capacitor/share';
 import { Filesystem, Directory } from '@capacitor/filesystem';
 import { Capacitor } from '@capacitor/core';
-
-// 1. Wildcard import bypasses the "no exported member" TS error
 import * as db from '../utils/db'; 
 import { saveConversion } from '../utils/storage';
 
@@ -90,18 +88,19 @@ const BackgroundRemover: React.FC = () => {
       try {
         const blob = await (await fetch(src)).blob();
         
-        // 2. Fixed TS Error: We omit 'id' and 'created_at' as required by your types
+        // FIXED: Added status, input_size, and output_size to satisfy TypeScript
         const savedRecord = await saveConversion({
           file_name: `Edited_${selectedFile.name}`,
           input_format: selectedFile.type.split('/')[1] || 'image',
           output_format: 'png',
-          type: 'image'
+          type: 'image',
+          status: 'completed',
+          input_size: selectedFile.size,
+          output_size: blob.size
         });
 
-        // 3. Extract the auto-generated ID from your storage utility
         const generatedId = (savedRecord as any)?.id || savedRecord || Date.now().toString();
 
-        // 4. Dynamically find the correct save function in your db.ts to prevent compile errors
         const saveBlobFunc = (db as any).setFileBlob || (db as any).saveFileBlob || (db as any).storeFileBlob || (db as any).saveBlob || (db as any).saveFile;
         
         if (saveBlobFunc && typeof generatedId === 'string') {
@@ -141,7 +140,6 @@ const BackgroundRemover: React.FC = () => {
     const fileName = `bg_removed_${Date.now()}.${extension}`;
 
     try {
-      // Web browser fallback
       if (Capacitor.getPlatform() === 'web') {
         const link = document.createElement('a');
         link.href = resultImage;
@@ -150,7 +148,6 @@ const BackgroundRemover: React.FC = () => {
         return;
       }
 
-      // Native Mobile Download
       const fileData = await Filesystem.readFile({
         path: resultPath,
       });
@@ -196,7 +193,6 @@ const BackgroundRemover: React.FC = () => {
       exit={{ opacity: 0, y: -20 }}
       className="space-y-6 pb-8"
     >
-      {/* Header */}
       <div className="flex items-center gap-3">
         <div className="p-3 bg-cyan-500/20 rounded-xl">
           <Wand2 className="w-6 h-6 text-cyan-400" />
@@ -207,7 +203,6 @@ const BackgroundRemover: React.FC = () => {
         </div>
       </div>
 
-      {/* Upload / Preview area */}
       <label className="block cursor-pointer">
         <input
           type="file"
@@ -250,7 +245,6 @@ const BackgroundRemover: React.FC = () => {
         </motion.div>
       </label>
 
-      {/* Remove Background Button */}
       <motion.button
         whileTap={{ scale: 0.97 }}
         onClick={handleRemoveBackground}
@@ -270,7 +264,6 @@ const BackgroundRemover: React.FC = () => {
         )}
       </motion.button>
 
-      {/* Error / Downloading notice */}
       <AnimatePresence>
         {error && (
           <motion.div
@@ -297,7 +290,6 @@ const BackgroundRemover: React.FC = () => {
         )}
       </AnimatePresence>
 
-      {/* Result */}
       <AnimatePresence>
         {resultImage && !error && (
           <motion.div
@@ -306,13 +298,11 @@ const BackgroundRemover: React.FC = () => {
             exit={{ opacity: 0 }}
             className="space-y-5"
           >
-            {/* Success badge */}
             <div className="flex items-center gap-2 text-green-400 text-sm font-medium">
               <CheckCircle2 className="w-4 h-4" />
               Background removed successfully
             </div>
 
-            {/* Checkerboard to show transparency */}
             <div
               className="rounded-2xl overflow-hidden border border-border relative bg-black/20"
               style={{
@@ -333,7 +323,6 @@ const BackgroundRemover: React.FC = () => {
               />
             </div>
 
-            {/* Background Color Picker */}
             <div className="space-y-3 p-4 bg-surface rounded-xl border border-border">
               <div className="flex items-center gap-2 text-sm text-text-dim">
                 <Palette className="w-4 h-4" />
@@ -358,7 +347,6 @@ const BackgroundRemover: React.FC = () => {
               </div>
             </div>
 
-            {/* Actions */}
             <div className="grid grid-cols-2 gap-3">
               <motion.button
                 whileTap={{ scale: 0.96 }}
