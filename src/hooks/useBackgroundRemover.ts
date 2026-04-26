@@ -12,7 +12,6 @@ export const useBackgroundRemover = () => {
     setIsLoading(true);
     setError(null);
     try {
-      // Convert file to base64 data URL
       const base64Data = await new Promise<string>((resolve, reject) => {
         const reader = new FileReader();
         reader.onloadend = () => resolve(reader.result as string);
@@ -20,50 +19,23 @@ export const useBackgroundRemover = () => {
         reader.readAsDataURL(imageFile);
       });
 
-      // Call the plugin
-      // @ts-ignore – the plugin's types may be incomplete
-      const { result } = await SubjectSegmentation.processImage({
-        image: { base64Image: base64Data }
-      });
-      
+      // ✅ Correct API: pass base64Image directly, not wrapped in 'image'
+      // @ts-ignore – The types are not matching the runtime API
+      const { result } = await SubjectSegmentation.processImage({ base64Image: base64Data });
       const foregroundBitmap = result?.foregroundBitmap;
-      if (!foregroundBitmap) {
-        throw new Error('No foreground bitmap returned');
-      }
+      if (!foregroundBitmap) throw new Error('No foreground bitmap');
 
-      // Ensure it's a data URL (add prefix if missing)
       const finalBase64 = foregroundBitmap.startsWith('data:')
         ? foregroundBitmap
         : `data:image/png;base64,${foregroundBitmap}`;
 
-      // Generate a unique file name
       const fileName = `bg_removed_${Date.now()}.png`;
-      if (!fileName) {
-        throw new Error('Failed to generate file name');
-      }
-
-      // Write file to cache
-      await Filesystem.writeFile({
-        path: fileName,
-        data: finalBase64,
-        directory: Directory.Cache,
-      });
-
-      // Get the URI
-      const fileUri = await Filesystem.getUri({
-        path: fileName,
-        directory: Directory.Cache,
-      });
-
-      if (!fileUri || !fileUri.uri) {
-        throw new Error('Failed to get file URI');
-      }
-
+      await Filesystem.writeFile({ path: fileName, data: finalBase64, directory: Directory.Cache });
+      const fileUri = await Filesystem.getUri({ path: fileName, directory: Directory.Cache });
       setResultPath(fileUri.uri);
       return fileUri.uri;
     } catch (err: any) {
-      console.error('Background removal error:', err);
-      setError(err.message || 'Background removal failed');
+      setError(err.message);
       throw err;
     } finally {
       setIsLoading(false);
