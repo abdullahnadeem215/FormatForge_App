@@ -14,7 +14,7 @@ export const useBackgroundRemover = () => {
     let tempFileName: string | null = null;
 
     try {
-      // Step 1: Convert file to raw base64 (no data URL prefix)
+      // Step 1: Convert file to raw base64 (strip data URL prefix)
       const base64Data = await new Promise<string>((resolve, reject) => {
         const reader = new FileReader();
         reader.onloadend = () => {
@@ -41,36 +41,23 @@ export const useBackgroundRemover = () => {
         directory: Directory.Cache,
       });
 
-      // Step 4: Call ML Kit with the actual file path
-      const { foregroundBitmap } = await SubjectSegmentation.processImage({
+      // Step 4: Call ML Kit — it saves the result itself and returns the path
+      const { path: outputPath } = await SubjectSegmentation.processImage({
         path: inputPath,
+        confidence: 0.7,
       });
 
-      if (!foregroundBitmap) throw new Error('No foreground bitmap returned');
+      if (!outputPath) throw new Error('No output path returned from ML Kit');
 
-      // Step 5: Strip data URL prefix if present, then save result
-      const resultBase64 = foregroundBitmap.startsWith('data:')
-        ? foregroundBitmap.split(',')[1]
-        : foregroundBitmap;
-
-      const outputFileName = `bg_removed_${Date.now()}.png`;
-      const writeResult = await Filesystem.writeFile({
-        path: outputFileName,
-        data: resultBase64,
-        directory: Directory.Cache,
-      });
-
-      if (!writeResult?.uri) throw new Error('Write file returned no URI');
-
-      setResultPath(writeResult.uri);
-      return writeResult.uri;
+      setResultPath(outputPath);
+      return outputPath;
 
     } catch (err: any) {
       console.error('Background removal error:', err);
       setError(err.message || 'Background removal failed');
       throw err;
     } finally {
-      // Step 6: Clean up temp input file
+      // Step 5: Clean up temp input file
       if (tempFileName) {
         Filesystem.deleteFile({ path: tempFileName, directory: Directory.Cache })
           .catch(() => {});
