@@ -9,8 +9,8 @@ export const useBackgroundRemover = () => {
   const [error, setError] = useState<string | null>(null);
   const [resultPath, setResultPath] = useState<string | null>(null);
 
-  // Uses raw pixel manipulation to guarantee the background is cut out
-  const applyAlphaMask = async (originalBase64: string, maskBase64: string): Promise<string> => {
+  // Reverses the ML Kit's hidden padding to perfectly align the mask with the original photo
+  const extractOriginalPixels = async (originalBase64: string, maskBase64: string): Promise<string> => {
     return new Promise((resolve, reject) => {
       const origImg = new Image();
       const maskImg = new Image();
@@ -19,37 +19,57 @@ export const useBackgroundRemover = () => {
       const checkDone = () => {
         if (loaded === 2) {
           try {
+            // 1. Draw Original High-Res Image
             const canvas = document.createElement('canvas');
             canvas.width = origImg.width;
             canvas.height = origImg.height;
-            // Optimizes the canvas for pixel manipulation
             const ctx = canvas.getContext('2d', { willReadFrequently: true });
-            if (!ctx) return reject(new Error('Canvas not available'));
-
-            // 1. Draw the pristine original image and extract its raw pixels
             ctx.drawImage(origImg, 0, 0);
-            const origImageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+            const origData = ctx.getImageData(0, 0, canvas.width, canvas.height);
 
-            // 2. Clear canvas, draw the ML Kit mask, and extract its pixels
-            ctx.clearRect(0, 0, canvas.width, canvas.height);
-            ctx.drawImage(maskImg, 0, 0, canvas.width, canvas.height);
-            const maskImageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+            // 2. Fix the Dimension/Padding Mismatch
+            // Calculate the exact bounding box of the padded ML Kit mask
+            const maskCanvas = document.createElement('canvas');
+            maskCanvas.width = origImg.width;
+            maskCanvas.height = origImg.height;
+            const maskCtx = maskCanvas.getContext('2d', { willReadFrequently: true });
 
-            // 3. Pixel-by-pixel mask application: we only care about transparency
-            const origPixels = origImageData.data;
-            const maskPixels = maskImageData.data;
+            const scale = Math.min(maskImg.width / origImg.width, maskImg.height / origImg.height);
+            const innerW = origImg.width * scale;
+            const innerH = origImg.height * scale;
+            const padX = (maskImg.width - innerW) / 2;
+            const padY = (maskImg.height - innerH) / 2;
 
-            for (let i = 0; i < origPixels.length; i += 4) {
-              // Index [i + 3] is the Alpha (transparency) channel.
-              // We copy the transparency from the ML Kit image directly to the original image.
-              // This leaves the original colors untouched and cuts out the background.
-              origPixels[i + 3] = maskPixels[i + 3];
+            // Extract the un-padded center of the purple mask and stretch it to match original dimensions
+            maskCtx.drawImage(
+              maskImg,
+              padX, padY, innerW, innerH, // Source (Mask center without padding)
+              0, 0, origImg.width, origImg.height // Destination (Full original canvas)
+            );
+            const maskData = maskCtx.getImageData(0, 0, maskCanvas.width, maskCanvas.height);
+
+            // 3. Pixel Loop: Cut out the background and restore colors
+            for (let i = 0; i < origData.data.length; i += 4) {
+              const r = maskData.data[i];
+              const g = maskData.data[i + 1];
+              const b = maskData.data[i + 2];
+              const a = maskData.data[i + 3];
+
+              // Detect the background (either perfectly transparent OR solid black)
+              const isBackground = a < 10 || (r < 5 && g < 5 && b < 5);
+
+              if (isBackground) {
+                // Erase the original photo's background
+                origData.data[i + 3] = 0; 
+              } else {
+                // It's the person! We leave the original pixel alone so you get normal colors, not purple.
+              }
             }
 
-            // 4. Put the perfectly cut-out pixels back onto the canvas
-            ctx.putImageData(origImageData, 0, 0);
-
-            // Return as PNG to preserve the new transparency
+            // 4. Put the perfect cutout back on the canvas
+            ctx.putImageData(origData, 0, 0);
+            
+            // Return as PNG to guarantee a transparent background
             resolve(canvas.toDataURL('image/png').split(',')[1]);
           } catch (err) {
             reject(err);
@@ -62,7 +82,6 @@ export const useBackgroundRemover = () => {
       origImg.onerror = reject;
       maskImg.onerror = reject;
 
-      // Ensure proper data URI formatting
       origImg.src = originalBase64.startsWith('data:') 
         ? originalBase64 
         : `data:image/jpeg;base64,${originalBase64}`;
@@ -79,7 +98,7 @@ export const useBackgroundRemover = () => {
     let tempFileName: string | null = null;
 
     try {
-      // Step 1: Convert to raw base64
+      // Step 1: Convert original image to raw base64
       const base64Data = await new Promise<string>((resolve, reject) => {
         const reader = new FileReader();
         reader.onloadend = () =>
@@ -121,7 +140,7 @@ export const useBackgroundRemover = () => {
         }
       }
 
-      // Step 5: Run ML Kit
+      // Step 5: Run ML Kit (returns the padded purple mask)
       const { path: outputPath } = await SubjectSegmentation.processImage({
         path: inputPath,
         confidence: 0.9,
@@ -129,7 +148,7 @@ export const useBackgroundRemover = () => {
 
       if (!outputPath) throw new Error('No output path returned from ML Kit');
 
-      // Step 6: Read result file (the segmentation mask)
+      // Step 6: Read result file
       let base64Result: string;
       try {
         const fileData = await Filesystem.readFile({
@@ -142,12 +161,11 @@ export const useBackgroundRemover = () => {
         base64Result = fileData.data as string;
       }
 
-      // Step 7: Apply the raw pixel mask to the original image
-      // Note: We pass 'base64Data' (the original from Step 1) and 'base64Result'
-      const fixedBase64 = await applyAlphaMask(base64Data, base64Result);
+      // Step 7: Fix Alignment & Extract Original Colors
+      const fixedBase64 = await extractOriginalPixels(base64Data, base64Result);
 
-      // Step 8: Write clean image back to cache
-      const fixedFileName = `bg_removed_clean_${Date.now()}.png`;
+      // Step 8: Write final perfect image back to cache
+      const fixedFileName = `bg_removed_final_${Date.now()}.png`;
       const writeFixed = await Filesystem.writeFile({
         path: fixedFileName,
         data: fixedBase64,
