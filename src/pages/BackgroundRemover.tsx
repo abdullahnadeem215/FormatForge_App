@@ -14,6 +14,9 @@ import {
 import { useBackgroundRemover } from '../hooks/useBackgroundRemover';
 import { Share } from '@capacitor/share';
 import { Filesystem, Directory } from '@capacitor/filesystem';
+import { Capacitor } from '@capacitor/core';
+import { saveFileToDB } from '../utils/db';
+import { addConversion } from '../utils/storage';
 
 const PRESET_COLORS = [
   { id: 'transparent', label: 'Clear', value: 'transparent' },
@@ -29,7 +32,6 @@ const BackgroundRemover: React.FC = () => {
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [resultImage, setResultImage] = useState<string | null>(null);
   
-  // Store the original transparent path so we can revert to it easily
   const [transparentPath, setTransparentPath] = useState<string | null>(null);
   const [activeColor, setActiveColor] = useState<string>('transparent');
 
@@ -48,7 +50,7 @@ const BackgroundRemover: React.FC = () => {
     }
   };
 
-  const loadFileIntoImage = async (path: string, isJpeg: boolean = false) => {
+  const loadFileIntoImage = async (path: string, isJpeg: boolean = false): Promise<string> => {
     try {
       const fileData = await Filesystem.readFile({
         path,
@@ -60,6 +62,7 @@ const BackgroundRemover: React.FC = () => {
         ? base64
         : `data:image/${mime};base64,${base64}`;
       setResultImage(src);
+      return src;
     } catch {
       const fileData = await Filesystem.readFile({ path });
       const base64 = fileData.data as string;
@@ -68,6 +71,7 @@ const BackgroundRemover: React.FC = () => {
         ? base64
         : `data:image/${mime};base64,${base64}`;
       setResultImage(src);
+      return src;
     }
   };
 
@@ -77,7 +81,28 @@ const BackgroundRemover: React.FC = () => {
       const path = await removeBackground(selectedFile);
       setTransparentPath(path);
       setActiveColor('transparent');
-      await loadFileIntoImage(path, false);
+      
+      const src = await loadFileIntoImage(path, false);
+
+      // Save to History Database
+      try {
+        const blob = await (await fetch(src)).blob();
+        const convId = Date.now().toString();
+        
+        await saveFileToDB(convId, blob);
+        
+        addConversion({
+          id: convId,
+          file_name: `Edited_${selectedFile.name}`,
+          input_format: selectedFile.type.split('/')[1] || 'image',
+          output_format: 'png',
+          type: 'image',
+          created_at: new Date().toISOString()
+        });
+      } catch (historyErr) {
+        console.error("Failed to save to history DB:", historyErr);
+      }
+
     } catch {
       // error already set in hook
     }
@@ -93,57 +118,55 @@ const BackgroundRemover: React.FC = () => {
     }
 
     try {
-      // applyBackgroundColor handles the heavy lifting instantly
       const newPath = await applyBackgroundColor(transparentPath, colorValue);
-      await loadFileIntoImage(newPath, true); // True because the hook saves colored bgs as JPEG
+      await loadFileIntoImage(newPath, true); 
     } catch (err) {
       console.error('Failed to apply color', err);
     }
   };
 
-  // ✅ IMPROVED DOWNLOAD BUTTON – works reliably on both web and Android
   const downloadImage = async () => {
-    if (!resultImage && !resultPath) return;
-    try {
-      let blob: Blob;
-      const filename = activeColor === 'transparent' ? 'background_removed.png' : 'background_colored.jpg';
+    if (!resultImage || !resultPath) return;
+    
+    const isTransparent = activeColor === 'transparent';
+    const extension = isTransparent ? 'png' : 'jpg';
+    const fileName = `bg_removed_${Date.now()}.${extension}`;
 
-      // If we have a native file path (from Capacitor), read and convert it
-      if (resultPath) {
-        const fileData = await Filesystem.readFile({
-          path: resultPath,
-          directory: Directory.Cache,
-        });
-        const base64 = fileData.data as string;
-        const response = await fetch(base64);
-        blob = await response.blob();
-      } 
-      // Fallback: use the resultImage data URL
-      else if (resultImage) {
-        const response = await fetch(resultImage);
-        blob = await response.blob();
-      } else {
+    try {
+      // Web browser fallback
+      if (Capacitor.getPlatform() === 'web') {
+        const link = document.createElement('a');
+        link.href = resultImage;
+        link.download = fileName;
+        link.click();
         return;
       }
 
-      // Create a temporary download link
-      const url = URL.createObjectURL(blob);
-      const link = document.createElement('a');
-      link.href = url;
-      link.download = filename;
-      document.body.appendChild(link);
-      link.click();
-      document.body.removeChild(link);
-      URL.revokeObjectURL(url);
+      // Native Mobile Download
+      const fileData = await Filesystem.readFile({
+        path: resultPath,
+      });
+
+      const result = await Filesystem.writeFile({
+        path: fileName,
+        data: fileData.data,
+        directory: Directory.Documents,
+      });
+
+      await Share.share({
+        title: 'Save Image',
+        text: 'Here is your edited image.',
+        url: result.uri,
+      });
+
     } catch (err) {
-      console.error('Download failed', err);
-      // Last resort: open image in new tab
-      if (resultImage) window.open(resultImage, '_blank');
+      console.error('Download/Share failed', err);
+      alert('Failed to download image. Please check storage permissions.');
     }
   };
 
   const shareImage = async () => {
-    if (!resultPath) return;
+    if (!resultPath) return; 
     try {
       await Share.share({
         title: 'Background Removed Image',
