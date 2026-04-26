@@ -1,3 +1,4 @@
+// src/pages/History.tsx
 import React, { useState } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { format } from 'date-fns';
@@ -9,52 +10,64 @@ import {
   Trash2, 
   Download, 
   Clock,
-  Search
+  Search,
+  AlertCircle
 } from 'lucide-react';
 import { useStorage } from '../hooks/useStorage';
 import { deleteConversion } from '../utils/storage';
 import { getFileBlob } from '../utils/db';
 import { saveAs } from 'file-saver';
-import { AlertCircle } from 'lucide-react';
 import { Filesystem, Directory } from '@capacitor/filesystem';
 import { Share } from '@capacitor/share';
+import { Capacitor } from '@capacitor/core';
 
 export default function HistoryPage() {
   const { history, refreshHistory } = useStorage();
   const [searchTerm, setSearchTerm] = useState('');
+  const [downloadError, setDownloadError] = useState<string | null>(null);
 
   const handleDelete = (id: string) => {
     deleteConversion(id);
     refreshHistory();
   };
 
-  const [downloadError, setDownloadError] = useState<string | null>(null);
-
-  // Capacitor Filesystem save function for device
   const saveToDevice = async (blob: Blob, fileName: string) => {
     try {
+      // 1. Web fallback (Browser download)
+      if (Capacitor.getPlatform() === 'web') {
+        saveAs(blob, fileName);
+        return;
+      }
+
+      // 2. Mobile Native Save (Android/iOS)
       const reader = new FileReader();
       reader.readAsDataURL(blob);
       reader.onloadend = async () => {
-        const base64 = (reader.result as string).split(',')[1];
-        
-        await Filesystem.writeFile({
-          path: fileName,
-          data: base64,
-          directory: Directory.Documents
-        });
-        
-        alert(`✅ Saved to Documents/${fileName}`);
-        
-        await Share.share({
-          title: 'File Downloaded',
-          text: 'Check out my converted file!',
-          url: `file://${fileName}`
-        });
+        try {
+          const base64 = (reader.result as string).split(',')[1];
+          
+          const result = await Filesystem.writeFile({
+            path: fileName,
+            data: base64,
+            directory: Directory.Documents
+          });
+          
+          // ADDED: The native pop-up alert confirming the save location
+          alert(`✅ File successfully saved to your Documents folder as:\n${fileName}`);
+
+          await Share.share({
+            title: 'Save File',
+            text: 'Here is your converted file.',
+            url: result.uri 
+          });
+        } catch (err) {
+          console.error('Filesystem/Share error:', err);
+          alert('Failed to save file. Please check storage permissions.');
+        }
       };
     } catch (error) {
       console.error('Save error:', error);
-      alert('Failed to save file. Please check storage permissions.');
+      alert('Failed to process file for downloading.');
     }
   };
 
@@ -119,9 +132,9 @@ export default function HistoryPage() {
             initial={{ opacity: 0, height: 0 }}
             animate={{ opacity: 1, height: 'auto' }}
             exit={{ opacity: 0, height: 0 }}
-            className="p-4 bg-red-500/10 border border-red-500/20 rounded-xl flex items-center gap-3 text-red-500 text-sm"
+            className="p-4 bg-red-500/10 border border-red-500/20 rounded-xl flex items-center gap-3 text-red-500 text-sm overflow-hidden"
           >
-            <AlertCircle className="w-4 h-4" />
+            <AlertCircle className="w-4 h-4 shrink-0" />
             {downloadError}
           </motion.div>
         )}
@@ -168,7 +181,7 @@ export default function HistoryPage() {
                 </button>
                 <button 
                   onClick={() => handleDelete(conv.id)}
-                  className="p-2 rounded-lg text-gray-400 transition-colors"
+                  className="p-2 rounded-lg text-gray-400 transition-colors hover:text-red-400 hover:bg-red-400/10"
                   title="Delete from History"
                 >
                   <Trash2 className="w-5 h-5" />
