@@ -14,19 +14,18 @@ export const useBackgroundRemover = () => {
     let tempFileName: string | null = null;
 
     try {
-      // Step 1: Convert file to base64
+      // Step 1: Convert file to raw base64 (no data URL prefix)
       const base64Data = await new Promise<string>((resolve, reject) => {
         const reader = new FileReader();
         reader.onloadend = () => {
           const result = reader.result as string;
-          // Strip the data URL prefix — Filesystem.writeFile needs raw base64
           resolve(result.split(',')[1]);
         };
         reader.onerror = reject;
         reader.readAsDataURL(imageFile);
       });
 
-      // Step 2: Write the input image to cache so ML Kit can read it via path
+      // Step 2: Write input image to cache so ML Kit can read it via path
       tempFileName = `mlkit_input_${Date.now()}.jpg`;
       const writeInput = await Filesystem.writeFile({
         path: tempFileName,
@@ -43,16 +42,15 @@ export const useBackgroundRemover = () => {
       });
 
       // Step 4: Call ML Kit with the actual file path
-      const { result } = await SubjectSegmentation.processImage({
-        path: inputPath,   // ✅ correct key, correct value
+      const { foregroundBitmap } = await SubjectSegmentation.processImage({
+        path: inputPath,
       });
 
-      const foregroundBitmap = result?.foregroundBitmap;
       if (!foregroundBitmap) throw new Error('No foreground bitmap returned');
 
-      // Step 5: Save the result
+      // Step 5: Strip data URL prefix if present, then save result
       const resultBase64 = foregroundBitmap.startsWith('data:')
-        ? foregroundBitmap.split(',')[1]   // strip prefix if present
+        ? foregroundBitmap.split(',')[1]
         : foregroundBitmap;
 
       const outputFileName = `bg_removed_${Date.now()}.png`;
@@ -72,10 +70,10 @@ export const useBackgroundRemover = () => {
       setError(err.message || 'Background removal failed');
       throw err;
     } finally {
-      // Step 6: Clean up the temp input file
+      // Step 6: Clean up temp input file
       if (tempFileName) {
         Filesystem.deleteFile({ path: tempFileName, directory: Directory.Cache })
-          .catch(() => {}); // silent cleanup
+          .catch(() => {});
       }
       setIsLoading(false);
     }
