@@ -33,13 +33,11 @@ export default function HistoryPage() {
 
   const saveToDevice = async (blob: Blob, fileName: string) => {
     try {
-      // 1. Web fallback (Browser download)
       if (Capacitor.getPlatform() === 'web') {
         saveAs(blob, fileName);
         return;
       }
 
-      // 2. Mobile Native Save (Android/iOS)
       const reader = new FileReader();
       reader.readAsDataURL(blob);
       reader.onloadend = async () => {
@@ -52,7 +50,6 @@ export default function HistoryPage() {
             directory: Directory.Documents
           });
           
-          // ADDED: The native pop-up alert confirming the save location
           alert(`✅ File successfully saved to your Documents folder as:\n${fileName}`);
 
           await Share.share({
