@@ -1,4 +1,3 @@
-// src/hooks/useBackgroundRemover.ts
 import { useState } from 'react';
 import { SubjectSegmentation } from '@capacitor-mlkit/subject-segmentation';
 import { Filesystem, Directory } from '@capacitor/filesystem';
@@ -12,6 +11,7 @@ export const useBackgroundRemover = () => {
     setIsLoading(true);
     setError(null);
     try {
+      // Convert file to base64 data URL
       const base64Data = await new Promise<string>((resolve, reject) => {
         const reader = new FileReader();
         reader.onloadend = () => resolve(reader.result as string);
@@ -19,23 +19,40 @@ export const useBackgroundRemover = () => {
         reader.readAsDataURL(imageFile);
       });
 
-      // ✅ Correct API: pass base64Image directly, not wrapped in 'image'
-      // @ts-ignore – The types are not matching the runtime API
+      // Call ML Kit plugin
+      // @ts-ignore – runtime API accepts base64Image directly
       const { result } = await SubjectSegmentation.processImage({ base64Image: base64Data });
       const foregroundBitmap = result?.foregroundBitmap;
-      if (!foregroundBitmap) throw new Error('No foreground bitmap');
+      if (!foregroundBitmap) throw new Error('No foreground bitmap returned');
 
+      // Ensure data URL format
       const finalBase64 = foregroundBitmap.startsWith('data:')
         ? foregroundBitmap
         : `data:image/png;base64,${foregroundBitmap}`;
 
-      const fileName = `bg_removed_${Date.now()}.png`;
-      await Filesystem.writeFile({ path: fileName, data: finalBase64, directory: Directory.Cache });
-      const fileUri = await Filesystem.getUri({ path: fileName, directory: Directory.Cache });
-      setResultPath(fileUri.uri);
-      return fileUri.uri;
+      // Create a unique filename – ensure it's a string
+      const timestamp = Date.now();
+      const fileName = `bg_removed_${timestamp}.png`;
+      if (!fileName || fileName.length === 0) {
+        throw new Error('Invalid filename generated');
+      }
+
+      // Write to cache directory
+      const writeResult = await Filesystem.writeFile({
+        path: fileName,
+        data: finalBase64,
+        directory: Directory.Cache,
+      });
+
+      if (!writeResult || !writeResult.uri) {
+        throw new Error('Write file returned no URI');
+      }
+
+      setResultPath(writeResult.uri);
+      return writeResult.uri;
     } catch (err: any) {
-      setError(err.message);
+      console.error('Background removal error:', err);
+      setError(err.message || 'Background removal failed');
       throw err;
     } finally {
       setIsLoading(false);
