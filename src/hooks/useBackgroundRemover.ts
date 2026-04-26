@@ -9,45 +9,106 @@ export const useBackgroundRemover = () => {
   const [error, setError] = useState<string | null>(null);
   const [resultPath, setResultPath] = useState<string | null>(null);
 
-  // Fix BGR->RGBA color channel swap using a canvas
-  const fixColorChannels = async (base64: string): Promise<string> => {
+  // 🔥 Clean alpha mask
+  const refineMask = async (base64: string): Promise<string> => {
     return new Promise((resolve, reject) => {
       const img = new Image();
+
       img.onload = () => {
         const canvas = document.createElement('canvas');
         canvas.width = img.width;
         canvas.height = img.height;
+
         const ctx = canvas.getContext('2d');
-        if (!ctx) return reject(new Error('Canvas not available'));
+        if (!ctx) return reject('Canvas error');
 
         ctx.drawImage(img, 0, 0);
 
         const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
         const data = imageData.data;
+
         for (let i = 0; i < data.length; i += 4) {
           const r = data[i];
+          const g = data[i + 1];
           const b = data[i + 2];
-          data[i] = b;      // swap R <- B
-          data[i + 2] = r;  // swap B <- R
+
+          const isBackground = r < 15 && g < 15 && b < 15;
+
+          if (isBackground) {
+            data[i + 3] = 0;
+          } else {
+            const intensity = (r + g + b) / 3;
+            data[i + 3] = Math.min(255, intensity + 40);
+          }
         }
+
         ctx.putImageData(imageData, 0, 0);
 
         resolve(canvas.toDataURL('image/png').split(',')[1]);
       };
+
       img.onerror = reject;
-      img.src = base64.startsWith('data:')
-        ? base64
-        : `data:image/png;base64,${base64}`;
+      img.src = `data:image/png;base64,${base64}`;
     });
   };
 
-  const removeBackground = async (imageFile: File): Promise<string> => {
+  // 🔥 Background replacement
+  const replaceBackground = async (
+    subjectBase64: string,
+    background: string
+  ): Promise<string> => {
+    return new Promise((resolve, reject) => {
+      const subjectImg = new Image();
+      const bgImg = new Image();
+
+      subjectImg.onload = () => {
+        const canvas = document.createElement('canvas');
+        canvas.width = subjectImg.width;
+        canvas.height = subjectImg.height;
+
+        const ctx = canvas.getContext('2d');
+        if (!ctx) return reject('Canvas error');
+
+        // Color background
+        if (!background.startsWith('data:')) {
+          ctx.fillStyle = background;
+          ctx.fillRect(0, 0, canvas.width, canvas.height);
+          ctx.drawImage(subjectImg, 0, 0);
+          return resolve(canvas.toDataURL('image/png').split(',')[1]);
+        }
+
+        // Image background
+        bgImg.onload = () => {
+          ctx.drawImage(bgImg, 0, 0, canvas.width, canvas.height);
+          ctx.drawImage(subjectImg, 0, 0);
+
+          // 🔥 Fake shadow for realism
+          ctx.globalAlpha = 0.2;
+          ctx.filter = 'blur(10px)';
+          ctx.drawImage(subjectImg, 5, canvas.height - 40, canvas.width * 0.9, 30);
+          ctx.globalAlpha = 1;
+          ctx.filter = 'none';
+
+          resolve(canvas.toDataURL('image/png').split(',')[1]);
+        };
+
+        bgImg.onerror = reject;
+        bgImg.src = background;
+      };
+
+      subjectImg.onerror = reject;
+      subjectImg.src = `data:image/png;base64,${subjectBase64}`;
+    });
+  };
+
+  const processImage = async (
+    imageFile: File,
+    background: string
+  ): Promise<string> => {
     setIsLoading(true);
     setError(null);
-    let tempFileName: string | null = null;
 
     try {
-      // Step 1: Convert to raw base64
       const base64Data = await new Promise<string>((resolve, reject) => {
         const reader = new FileReader();
         reader.onloadend = () =>
@@ -56,90 +117,62 @@ export const useBackgroundRemover = () => {
         reader.readAsDataURL(imageFile);
       });
 
-      // Step 2: Write input to cache
-      tempFileName = `mlkit_input_${Date.now()}.jpg`;
-      const writeInput = await Filesystem.writeFile({
-        path: tempFileName,
+      const fileName = `input_${Date.now()}.jpg`;
+
+      await Filesystem.writeFile({
+        path: fileName,
         data: base64Data,
         directory: Directory.Cache,
       });
-      if (!writeInput?.uri) throw new Error('Failed to write input image to cache');
 
-      // Step 3: Get native file:// path
-      const { uri: inputPath } = await Filesystem.getUri({
-        path: tempFileName,
+      const { uri } = await Filesystem.getUri({
+        path: fileName,
         directory: Directory.Cache,
       });
 
-      // Step 4: Check availability on Android
       if (Capacitor.getPlatform() === 'android') {
-        try {
-          const { available } =
-            await SubjectSegmentation.isGoogleSubjectSegmentationModuleAvailable();
-          if (!available) {
-            SubjectSegmentation.installGoogleSubjectSegmentationModule().catch(() => {});
-            throw new Error(
-              'ML Kit model is being downloaded by Google Play Services. ' +
-              'This only happens once — please wait 30–60 seconds and try again.'
-            );
-          }
-        } catch (checkErr: any) {
-          if (checkErr.message?.includes('ML Kit model is being downloaded')) throw checkErr;
-          console.warn('Module check failed, trying processImage anyway:', checkErr.message);
+        const { available } =
+          await SubjectSegmentation.isGoogleSubjectSegmentationModuleAvailable();
+
+        if (!available) {
+          await SubjectSegmentation.installGoogleSubjectSegmentationModule();
+          throw new Error('Model downloading...');
         }
       }
 
-      // Step 5: Run ML Kit
-      const { path: outputPath } = await SubjectSegmentation.processImage({
-        path: inputPath,
+      const { path } = await SubjectSegmentation.processImage({
+        path: uri,
         confidence: 0.9,
       });
 
-      if (!outputPath) throw new Error('No output path returned from ML Kit');
+      const fileData = await Filesystem.readFile({ path });
+      const base64Result = fileData.data as string;
 
-      // Step 6: Read result file
-      let base64Result: string;
-      try {
-        const fileData = await Filesystem.readFile({
-          path: outputPath,
-          directory: Directory.Cache,
-        });
-        base64Result = fileData.data as string;
-      } catch {
-        const fileData = await Filesystem.readFile({ path: outputPath });
-        base64Result = fileData.data as string;
-      }
+      const refined = await refineMask(base64Result);
 
-      // Step 7: Fix BGR->RGBA color channel swap (fixes pink tint)
-      const fixedBase64 = await fixColorChannels(base64Result);
+      const finalImage = await replaceBackground(refined, background);
 
-      // Step 8: Write fixed image back to cache
-      const fixedFileName = `bg_removed_fixed_${Date.now()}.png`;
-      const writeFixed = await Filesystem.writeFile({
-        path: fixedFileName,
-        data: fixedBase64,
+      const finalName = `final_${Date.now()}.png`;
+
+      const saved = await Filesystem.writeFile({
+        path: finalName,
+        data: finalImage,
         directory: Directory.Cache,
       });
-      if (!writeFixed?.uri) throw new Error('Failed to write fixed image');
 
-      setResultPath(writeFixed.uri);
-      return writeFixed.uri;
+      setResultPath(saved.uri);
+      return saved.uri;
 
     } catch (err: any) {
-      const msg: string = err.message || 'Background removal failed';
-      setError(msg);
+      setError(err.message);
       throw err;
     } finally {
-      if (tempFileName) {
-        Filesystem.deleteFile({ path: tempFileName, directory: Directory.Cache })
-          .catch(() => {});
-      }
       setIsLoading(false);
     }
   };
 
   return {
-    removeBackground,
+    processImage,
     isLoading,
     error,
     resultPath,
