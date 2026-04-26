@@ -15,8 +15,8 @@ import { useBackgroundRemover } from '../hooks/useBackgroundRemover';
 import { Share } from '@capacitor/share';
 import { Filesystem, Directory } from '@capacitor/filesystem';
 import { Capacitor } from '@capacitor/core';
-import { saveFileToDB } from '../utils/db';
-import { addConversion } from '../utils/storage';
+import { saveFile } from '../utils/db'; // Fixed import
+import { saveConversion } from '../utils/storage'; // Fixed import
 
 const PRESET_COLORS = [
   { id: 'transparent', label: 'Clear', value: 'transparent' },
@@ -89,9 +89,9 @@ const BackgroundRemover: React.FC = () => {
         const blob = await (await fetch(src)).blob();
         const convId = Date.now().toString();
         
-        await saveFileToDB(convId, blob);
+        await saveFile(convId, blob); // Fixed function name
         
-        addConversion({
+        saveConversion({ // Fixed function name
           id: convId,
           file_name: `Edited_${selectedFile.name}`,
           input_format: selectedFile.type.split('/')[1] || 'image',
@@ -153,7 +153,7 @@ const BackgroundRemover: React.FC = () => {
         directory: Directory.Documents,
       });
 
-      // ADDED: The native pop-up alert confirming the save location
+      // The native pop-up alert confirming the save location
       alert(`✅ Image successfully saved to your Documents folder as:\n${fileName}`);
 
       await Share.share({
