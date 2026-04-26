@@ -8,6 +8,7 @@ export const useBackgroundRemover = () => {
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [resultPath, setResultPath] = useState<string | null>(null);
+  const [transparentImage, setTransparentImage] = useState<string | null>(null);
 
   // 🔥 Clean alpha mask
   const refineMask = async (base64: string): Promise<string> => {
@@ -32,9 +33,9 @@ export const useBackgroundRemover = () => {
           const g = data[i + 1];
           const b = data[i + 2];
 
-          const isBackground = r < 15 && g < 15 && b < 15;
+          const isBg = r < 15 && g < 15 && b < 15;
 
-          if (isBackground) {
+          if (isBg) {
             data[i + 3] = 0;
           } else {
             const intensity = (r + g + b) / 3;
@@ -52,76 +53,64 @@ export const useBackgroundRemover = () => {
     });
   };
 
-  // 🔥 Background replacement
+  // 🔥 Background replace
   const replaceBackground = async (
     subjectBase64: string,
     background: string
   ): Promise<string> => {
     return new Promise((resolve, reject) => {
-      const subjectImg = new Image();
-      const bgImg = new Image();
+      const subject = new Image();
+      const bg = new Image();
 
-      subjectImg.onload = () => {
+      subject.onload = () => {
         const canvas = document.createElement('canvas');
-        canvas.width = subjectImg.width;
-        canvas.height = subjectImg.height;
+        canvas.width = subject.width;
+        canvas.height = subject.height;
 
         const ctx = canvas.getContext('2d');
         if (!ctx) return reject('Canvas error');
 
-        // Color background
         if (!background.startsWith('data:')) {
           ctx.fillStyle = background;
           ctx.fillRect(0, 0, canvas.width, canvas.height);
-          ctx.drawImage(subjectImg, 0, 0);
+          ctx.drawImage(subject, 0, 0);
           return resolve(canvas.toDataURL('image/png').split(',')[1]);
         }
 
-        // Image background
-        bgImg.onload = () => {
-          ctx.drawImage(bgImg, 0, 0, canvas.width, canvas.height);
-          ctx.drawImage(subjectImg, 0, 0);
-
-          // 🔥 Fake shadow for realism
-          ctx.globalAlpha = 0.2;
-          ctx.filter = 'blur(10px)';
-          ctx.drawImage(subjectImg, 5, canvas.height - 40, canvas.width * 0.9, 30);
-          ctx.globalAlpha = 1;
-          ctx.filter = 'none';
-
+        bg.onload = () => {
+          ctx.drawImage(bg, 0, 0, canvas.width, canvas.height);
+          ctx.drawImage(subject, 0, 0);
           resolve(canvas.toDataURL('image/png').split(',')[1]);
         };
 
-        bgImg.onerror = reject;
-        bgImg.src = background;
+        bg.onerror = reject;
+        bg.src = background;
       };
 
-      subjectImg.onerror = reject;
-      subjectImg.src = `data:image/png;base64,${subjectBase64}`;
+      subject.onerror = reject;
+      subject.src = `data:image/png;base64,${subjectBase64}`;
     });
   };
 
-  const processImage = async (
-    imageFile: File,
-    background: string
-  ): Promise<string> => {
+  const processImage = async (file: File, background: string): Promise<string> => {
     setIsLoading(true);
     setError(null);
 
     try {
-      const base64Data = await new Promise<string>((resolve, reject) => {
+      // Convert file → base64
+      const base64 = await new Promise<string>((res, rej) => {
         const reader = new FileReader();
         reader.onloadend = () =>
-          resolve((reader.result as string).split(',')[1]);
-        reader.onerror = reject;
-        reader.readAsDataURL(imageFile);
+          res((reader.result as string).split(',')[1]);
+        reader.onerror = rej;
+        reader.readAsDataURL(file);
       });
 
       const fileName = `input_${Date.now()}.jpg`;
 
       await Filesystem.writeFile({
         path: fileName,
-        data: base64Data,
+        data: base64,
         directory: Directory.Cache,
       });
 
@@ -130,6 +119,7 @@ export const useBackgroundRemover = () => {
         directory: Directory.Cache,
       });
 
+      // Ensure ML Kit model
       if (Capacitor.getPlatform() === 'android') {
         const { available } =
           await SubjectSegmentation.isGoogleSubjectSegmentationModuleAvailable();
@@ -146,17 +136,20 @@ export const useBackgroundRemover = () => {
       });
 
       const fileData = await Filesystem.readFile({ path });
-      const base64Result = fileData.data as string;
+      const segmented = fileData.data as string;
 
-      const refined = await refineMask(base64Result);
+      // 🔥 Transparent result
+      const refined = await refineMask(segmented);
+      setTransparentImage(`data:image/png;base64,${refined}`);
 
-      const finalImage = await replaceBackground(refined, background);
+      // 🔥 Final output
+      const final = await replaceBackground(refined, background);
 
       const finalName = `final_${Date.now()}.png`;
 
       const saved = await Filesystem.writeFile({
         path: finalName,
-        data: finalImage,
+        data: final,
         directory: Directory.Cache,
       });
 
@@ -164,7 +157,7 @@ export const useBackgroundRemover = () => {
       return saved.uri;
 
     } catch (err: any) {
-      setError(err.message);
+      setError(err.message || 'Processing failed');
       throw err;
     } finally {
       setIsLoading(false);
@@ -176,5 +169,6 @@ export const useBackgroundRemover = () => {
     isLoading,
     error,
     resultPath,
+    transparentImage,
   };
 };
