@@ -88,7 +88,7 @@ const BackgroundRemover: React.FC = () => {
       try {
         const blob = await (await fetch(src)).blob();
         
-        // FIXED: Added status, input_size, and output_size to satisfy TypeScript
+        // Includes all required fields for your ConversionRecord interface
         const savedRecord = await saveConversion({
           file_name: `Edited_${selectedFile.name}`,
           input_format: selectedFile.type.split('/')[1] || 'image',
@@ -152,7 +152,7 @@ const BackgroundRemover: React.FC = () => {
         path: resultPath,
       });
 
-      const result = await Filesystem.writeFile({
+      await Filesystem.writeFile({
         path: fileName,
         data: fileData.data,
         directory: Directory.Documents,
@@ -160,14 +160,8 @@ const BackgroundRemover: React.FC = () => {
 
       alert(`✅ Image successfully saved to your Documents folder as:\n${fileName}`);
 
-      await Share.share({
-        title: 'Save Image',
-        text: 'Here is your edited image.',
-        url: result.uri,
-      });
-
     } catch (err) {
-      console.error('Download/Share failed', err);
+      console.error('Download failed', err);
       alert('Failed to download image. Please check storage permissions.');
     }
   };
