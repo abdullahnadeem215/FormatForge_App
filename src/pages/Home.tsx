@@ -3,7 +3,6 @@ import { motion } from 'motion/react';
 import { 
   Image as ImageIcon, 
   Music, 
-  Video, 
   Zap,
   Mic,
   Wand2
@@ -20,20 +19,12 @@ const converters = [
     path: '/convert/image'
   },
   {
-    id: 'audio',
-    title: 'Audio Pro',
-    description: 'Convert between MP3, WAV, AAC, OGG, FLAC, M4A. Bitrate control.',
+    id: 'media',                     // merged audio & video-to-audio
+    title: 'Media Converter',
+    description: 'Convert audio or extract audio from video into (wav-format). Offline.',
     icon: <Music className="w-8 h-8" />,
     color: 'from-purple-500 to-indigo-500',
-    path: '/convert/audio'
-  },
-  {
-    id: 'video-to-audio',
-    title: 'Video Rip',
-    description: 'Extract master-quality audio strings from any video file.',
-    icon: <Video className="w-8 h-8" />,
-    color: 'from-pink-500 to-rose-500',
-    path: '/convert/video-to-audio'
+    path: '/convert/video-to-audio'         // uses existing audio converter (which also supports video import)
   },
   {
     id: 'text-to-speech',
