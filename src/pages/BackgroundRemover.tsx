@@ -101,20 +101,49 @@ const BackgroundRemover: React.FC = () => {
     }
   };
 
+  // ✅ IMPROVED DOWNLOAD BUTTON – works reliably on both web and Android
   const downloadImage = async () => {
-    if (!resultImage) return;
+    if (!resultImage && !resultPath) return;
     try {
+      let blob: Blob;
+      const filename = activeColor === 'transparent' ? 'background_removed.png' : 'background_colored.jpg';
+
+      // If we have a native file path (from Capacitor), read and convert it
+      if (resultPath) {
+        const fileData = await Filesystem.readFile({
+          path: resultPath,
+          directory: Directory.Cache,
+        });
+        const base64 = fileData.data as string;
+        const response = await fetch(base64);
+        blob = await response.blob();
+      } 
+      // Fallback: use the resultImage data URL
+      else if (resultImage) {
+        const response = await fetch(resultImage);
+        blob = await response.blob();
+      } else {
+        return;
+      }
+
+      // Create a temporary download link
+      const url = URL.createObjectURL(blob);
       const link = document.createElement('a');
-      link.href = resultImage;
-      link.download = activeColor === 'transparent' ? 'background_removed.png' : 'background_colored.jpg';
+      link.href = url;
+      link.download = filename;
+      document.body.appendChild(link);
       link.click();
+      document.body.removeChild(link);
+      URL.revokeObjectURL(url);
     } catch (err) {
       console.error('Download failed', err);
+      // Last resort: open image in new tab
+      if (resultImage) window.open(resultImage, '_blank');
     }
   };
 
   const shareImage = async () => {
-    if (!resultPath) return; // Uses the most recent path from the hook
+    if (!resultPath) return;
     try {
       await Share.share({
         title: 'Background Removed Image',
