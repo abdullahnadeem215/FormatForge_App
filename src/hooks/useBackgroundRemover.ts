@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Capacitor } from '@capacitor/core';
+import { SubjectSegmentation } from '@capacitor-mlkit/subject-segmentation';
 import { Filesystem, Directory } from '@capacitor/filesystem';
 
 export const useBackgroundRemover = () => {
@@ -11,11 +11,7 @@ export const useBackgroundRemover = () => {
     setIsLoading(true);
     setError(null);
     try {
-      if (!Capacitor.isNativePlatform()) {
-        throw new Error('Background removal only on Android');
-      }
-
-      // Convert file to base64 data URL
+      // Convert file to base64
       const base64 = await new Promise<string>((resolve, reject) => {
         const reader = new FileReader();
         reader.onloadend = () => resolve(reader.result as string);
@@ -23,22 +19,14 @@ export const useBackgroundRemover = () => {
         reader.readAsDataURL(imageFile);
       });
 
-      // @ts-ignore - Capacitor plugins available at runtime
-      const { BackgroundRemover } = Capacitor.Plugins;
-      if (!BackgroundRemover) {
-        throw new Error('BackgroundRemover plugin not found');
-      }
-
-      const response = await BackgroundRemover.removeBackground({ image: base64 });
-      const resultBase64 = response.result;
+      // Call the community plugin
+      const { result } = await SubjectSegmentation.processImage({ base64Image: base64 });
+      const foregroundBitmap = result.foregroundBitmap;
+      if (!foregroundBitmap) throw new Error('No foreground bitmap');
 
       // Save to cache
       const fileName = `bg_removed_${Date.now()}.png`;
-      await Filesystem.writeFile({
-        path: fileName,
-        data: resultBase64,
-        directory: Directory.Cache,
-      });
+      await Filesystem.writeFile({ path: fileName, data: foregroundBitmap, directory: Directory.Cache });
       const fileUri = await Filesystem.getUri({ directory: Directory.Cache, path: fileName });
       setResultPath(fileUri.uri);
       return fileUri.uri;
