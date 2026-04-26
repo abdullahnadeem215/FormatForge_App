@@ -153,6 +153,9 @@ const BackgroundRemover: React.FC = () => {
         directory: Directory.Documents,
       });
 
+      // ADDED: The native pop-up alert confirming the save location
+      alert(`✅ Image successfully saved to your Documents folder as:\n${fileName}`);
+
       await Share.share({
         title: 'Save Image',
         text: 'Here is your edited image.',
