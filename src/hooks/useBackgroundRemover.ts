@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { SubjectSegmentation } from '@capacitor-mlkit/subject-segmentation';
 import { Filesystem, Directory } from '@capacitor/filesystem';
 import { Capacitor } from '@capacitor/core';
@@ -9,6 +9,7 @@ export const useBackgroundRemover = () => {
   const [isInstalling, setIsInstalling] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [resultPath, setResultPath] = useState<string | null>(null);
+  const pollingRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   useEffect(() => {
     if (Capacitor.getPlatform() === 'android') {
@@ -16,78 +17,74 @@ export const useBackgroundRemover = () => {
     } else {
       setIsModuleReady(true);
     }
+
+    return () => {
+      if (pollingRef.current) clearInterval(pollingRef.current);
+    };
   }, []);
 
+  const checkAvailable = async (): Promise<boolean> => {
+    try {
+      const { available } =
+        await SubjectSegmentation.isGoogleSubjectSegmentationModuleAvailable();
+      return available;
+    } catch {
+      return false;
+    }
+  };
+
   const ensureModuleInstalled = async (): Promise<void> => {
-    setIsInstalling(true);
     setError(null);
 
     try {
-      // Check availability first
-      let available = false;
-      try {
-        const result =
-          await SubjectSegmentation.isGoogleSubjectSegmentationModuleAvailable();
-        available = result.available;
-      } catch {
-        // Check failed — treat as not available, proceed to install
-        available = false;
-      }
-
-      if (available) {
+      // 1. Already available? Done.
+      const already = await checkAvailable();
+      if (already) {
         setIsModuleReady(true);
-        setIsInstalling(false);
         return;
       }
 
-      // Set up install progress listener before calling install
-      const listener = await SubjectSegmentation.addListener(
-        'googleSubjectSegmentationModuleInstallProgress',
-        async (event) => {
-          console.log(`ML Kit install: state=${event.state} progress=${event.progress}%`);
-
-          if (event.state === 4) {
-            // COMPLETED
-            await listener.remove();
-            // Small delay to let the module fully initialize
-            await new Promise((r) => setTimeout(r, 2000));
-            setIsModuleReady(true);
-            setIsInstalling(false);
-          }
-
-          if (event.state === 5) {
-            // FAILED
-            await listener.remove();
-            setError('ML Kit module download failed. Check your internet connection and try again.');
-            setIsInstalling(false);
-          }
-        }
-      );
-
-      // Trigger the install
-      await SubjectSegmentation.installGoogleSubjectSegmentationModule();
-
-      // If the meta-data tag is set in AndroidManifest.xml, the module may
-      // already be silently downloaded by Play Services — wait briefly and recheck
-      await new Promise((r) => setTimeout(r, 3000));
-
+      // 2. Trigger install
+      setIsInstalling(true);
       try {
-        const { available: recheckAvailable } =
-          await SubjectSegmentation.isGoogleSubjectSegmentationModuleAvailable();
-        if (recheckAvailable) {
-          await listener.remove();
-          setIsModuleReady(true);
-          setIsInstalling(false);
-        }
-        // else: listener is still active and will fire when done
+        await SubjectSegmentation.installGoogleSubjectSegmentationModule();
       } catch {
-        // recheck failed, let the listener handle it
+        // install call itself sometimes throws even when download starts — ignore
       }
 
+      // 3. Poll every 3s for up to 2 minutes
+      let elapsed = 0;
+      const POLL_INTERVAL = 3000;
+      const MAX_WAIT = 120000;
+
+      await new Promise<void>((resolve) => {
+        pollingRef.current = setInterval(async () => {
+          elapsed += POLL_INTERVAL;
+          const ready = await checkAvailable();
+
+          if (ready) {
+            clearInterval(pollingRef.current!);
+            pollingRef.current = null;
+            setIsModuleReady(true);
+            setIsInstalling(false);
+            resolve();
+            return;
+          }
+
+          if (elapsed >= MAX_WAIT) {
+            clearInterval(pollingRef.current!);
+            pollingRef.current = null;
+            setIsInstalling(false);
+            setError('ML Kit module download timed out. Please check your internet connection and restart the app.');
+            resolve();
+          }
+        }, POLL_INTERVAL);
+      });
+
     } catch (err: any) {
-      console.error('Module install error:', err);
-      setError('Failed to install ML Kit module. Please restart the app and try again.');
+      console.error('Module init error:', err);
       setIsInstalling(false);
+      setError('Failed to initialize ML Kit. Please restart the app.');
     }
   };
 
@@ -95,7 +92,7 @@ export const useBackgroundRemover = () => {
     if (!isModuleReady) {
       throw new Error(
         isInstalling
-          ? 'ML Kit module is still downloading, please wait.'
+          ? 'ML Kit is still downloading, please wait.'
           : 'ML Kit module is not ready. Please restart the app.'
       );
     }
@@ -105,7 +102,6 @@ export const useBackgroundRemover = () => {
     let tempFileName: string | null = null;
 
     try {
-      // Step 1: Convert to raw base64
       const base64Data = await new Promise<string>((resolve, reject) => {
         const reader = new FileReader();
         reader.onloadend = () =>
@@ -114,7 +110,6 @@ export const useBackgroundRemover = () => {
         reader.readAsDataURL(imageFile);
       });
 
-      // Step 2: Write input to cache
       tempFileName = `mlkit_input_${Date.now()}.jpg`;
       const writeInput = await Filesystem.writeFile({
         path: tempFileName,
@@ -124,13 +119,11 @@ export const useBackgroundRemover = () => {
 
       if (!writeInput?.uri) throw new Error('Failed to write input image to cache');
 
-      // Step 3: Get native file:// path
       const { uri: inputPath } = await Filesystem.getUri({
         path: tempFileName,
         directory: Directory.Cache,
       });
 
-      // Step 4: Run ML Kit
       const { path: outputPath } = await SubjectSegmentation.processImage({
         path: inputPath,
         confidence: 0.7,
@@ -154,6 +147,13 @@ export const useBackgroundRemover = () => {
     }
   };
 
+  // Expose retry so user can manually trigger from UI
+  const retryModuleInstall = () => {
+    if (pollingRef.current) clearInterval(pollingRef.current);
+    setIsModuleReady(false);
+    ensureModuleInstalled();
+  };
+
   return {
     removeBackground,
     isLoading,
@@ -161,5 +161,6 @@ export const useBackgroundRemover = () => {
     isInstalling,
     error,
     resultPath,
+    retryModuleInstall,
   };
 };
