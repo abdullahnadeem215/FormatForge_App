@@ -23,11 +23,29 @@ allprojects {
     }
 }
 
-// ✅ Force Java 17 for all subprojects (including Capacitor core modules)
+// Force Java 17 for EVERY subproject (including Capacitor core modules)
 subprojects {
-    tasks.withType(JavaCompile).configureEach {
-        sourceCompatibility = JavaVersion.VERSION_17
-        targetCompatibility = JavaVersion.VERSION_17
+    plugins.withType(JavaPlugin).configureEach {
+        java {
+            toolchain {
+                languageVersion = JavaLanguageVersion.of(17)
+            }
+        }
+    }
+    // Also set for Android modules (which use the android plugin)
+    afterEvaluate {
+        android {
+            compileOptions {
+                sourceCompatibility JavaVersion.VERSION_17
+                targetCompatibility JavaVersion.VERSION_17
+            }
+        }
+        // For Kotlin modules
+        tasks.withType(org.jetbrains.kotlin.gradle.tasks.KotlinCompile).configureEach {
+            kotlinOptions {
+                jvmTarget = "17"
+            }
+        }
     }
 }
 
