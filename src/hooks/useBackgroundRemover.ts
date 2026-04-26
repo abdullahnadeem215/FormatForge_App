@@ -4,13 +4,34 @@ import { SubjectSegmentation } from '@capacitor-mlkit/subject-segmentation';
 import { Filesystem, Directory } from '@capacitor/filesystem';
 import { Capacitor } from '@capacitor/core';
 
+// Helper to add conversion to history (matches History.tsx)
+const addToHistory = (inputFileName: string, outputPath: string, status: 'completed' | 'failed') => {
+  try {
+    const existing = localStorage.getItem('conversionHistory');
+    const history = existing ? JSON.parse(existing) : [];
+    const newEntry = {
+      id: Date.now().toString(),
+      type: 'background-remover',
+      inputFile: inputFileName,
+      outputFile: outputPath,
+      timestamp: new Date().toISOString(),
+      status: status,
+    };
+    history.unshift(newEntry);
+    const trimmed = history.slice(0, 50);
+    localStorage.setItem('conversionHistory', JSON.stringify(trimmed));
+  } catch (e) {
+    console.warn('Failed to save to history:', e);
+  }
+};
+
 export const useBackgroundRemover = () => {
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [resultPath, setResultPath] = useState<string | null>(null);
 
-  // 1. Core ML Kit Extraction (Heavy lifting - done once)
   const extractOriginalPixels = async (originalBase64: string, maskBase64: string): Promise<string> => {
+    // ... (your existing implementation, unchanged)
     return new Promise((resolve, reject) => {
       const origImg = new Image();
       const maskImg = new Image();
@@ -158,9 +179,16 @@ export const useBackgroundRemover = () => {
       });
 
       setResultPath(writeFixed.uri);
-      return writeFixed.uri; // This is your 100% transparent PNG
+      
+      // ✅ Save to history (success)
+      addToHistory(imageFile.name, writeFixed.uri, 'completed');
+      
+      return writeFixed.uri;
 
     } catch (err: any) {
+      // ✅ Save to history (failure)
+      addToHistory(imageFile.name, '', 'failed');
+      
       setError(err.message || 'Background removal failed');
       throw err;
     } finally {
@@ -169,12 +197,10 @@ export const useBackgroundRemover = () => {
     }
   };
 
-  // 2. Fast Color Applier (Lightweight - call this instantly when user picks a color)
   const applyBackgroundColor = async (transparentFileUri: string, hexColor: string): Promise<string> => {
     setIsLoading(true);
     return new Promise(async (resolve, reject) => {
       try {
-        // Read the transparent file back from cache
         const fileData = await Filesystem.readFile({ path: transparentFileUri });
         const base64Data = fileData.data as string;
 
@@ -186,14 +212,10 @@ export const useBackgroundRemover = () => {
           const ctx = canvas.getContext('2d');
           if (!ctx) return reject('Canvas error');
 
-          // Paint the background color first
           ctx.fillStyle = hexColor;
           ctx.fillRect(0, 0, canvas.width, canvas.height);
-
-          // Stamp the transparent person on top
           ctx.drawImage(img, 0, 0);
 
-          // Save as JPEG (smaller file size since it has a solid background)
           const newBase64 = canvas.toDataURL('image/jpeg', 0.9).split(',')[1];
           const fileName = `bg_colored_${Date.now()}.jpg`;
           
@@ -224,6 +246,6 @@ export const useBackgroundRemover = () => {
     applyBackgroundColor,
     isLoading,
     error,
-    resultPath, // This will always hold the URI of the most recently processed image
+    resultPath,
   };
 };
