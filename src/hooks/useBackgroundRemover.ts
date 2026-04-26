@@ -1,7 +1,6 @@
 // src/hooks/useBackgroundRemover.ts
 import { useState } from 'react';
-// UPDATED: Now using the bundled plugin that works 100% offline
-import { SubjectSegmentation } from '@capacitor-mlkit/subject-segmentation-bundled';
+import { SubjectSegmentation } from '@capacitor-mlkit/subject-segmentation';
 import { Filesystem, Directory } from '@capacitor/filesystem';
 import { Capacitor } from '@capacitor/core';
 
@@ -153,7 +152,23 @@ export const useBackgroundRemover = () => {
         directory: Directory.Data,
       });
 
-      // --- STEP 4: THE "WARM-UP" TRICK (PREVENTS OFFLINE CRASHES) ---
+      // Step 4: Check availability on Android
+      if (Capacitor.getPlatform() === 'android') {
+        try {
+          const { available } = await SubjectSegmentation.isGoogleSubjectSegmentationModuleAvailable();
+          if (!available) {
+            SubjectSegmentation.installGoogleSubjectSegmentationModule().catch(() => {});
+            throw new Error(
+              'ML Kit model is being downloaded by Google Play Services. ' +
+              'This only happens once — please wait 30–60 seconds and try again.'
+            );
+          }
+        } catch (checkErr: any) {
+          if (checkErr.message?.includes('being downloaded')) throw checkErr;
+        }
+      }
+
+      // --- STEP 4.5: THE "WARM-UP" TRICK (PREVENTS OFFLINE CRASHES) ---
       // We pass a microscopic 1x1 transparent pixel to the AI first. 
       // This forces the heavy AI model to load into RAM *before* the massive photo is loaded.
       if (Capacitor.getPlatform() === 'android') {
