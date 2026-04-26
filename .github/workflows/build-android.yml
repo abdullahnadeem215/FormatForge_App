@@ -22,7 +22,7 @@ jobs:
         uses: actions/setup-java@v4
         with:
           distribution: 'temurin'
-          java-version: '21'
+          java-version: '17'          # Use Java 17 for better compatibility with Kotlin/Gradle
 
       - name: Install dependencies
         run: npm install --legacy-peer-deps
@@ -30,7 +30,8 @@ jobs:
       - name: Install Capacitor and plugins
         run: |
           npm install @capacitor/core @capacitor/cli @capacitor/android --legacy-peer-deps
-          npm install @capacitor-community/text-to-speech --legacy-peer-deps  # if still needed
+          npm install @capacitor-community/text-to-speech --legacy-peer-deps   # Keep if needed
+          npm install @capacitor-mlkit/subject-segmentation --legacy-peer-deps # Background remover
 
       - name: Build web app
         run: npm run build
