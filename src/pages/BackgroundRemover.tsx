@@ -15,7 +15,7 @@ import { useBackgroundRemover } from '../hooks/useBackgroundRemover';
 import { Share } from '@capacitor/share';
 import { Filesystem, Directory } from '@capacitor/filesystem';
 import { Capacitor } from '@capacitor/core';
-import * as db from '../utils/db'; 
+import * as db from '../utils/db';
 import { saveConversion } from '../utils/storage';
 
 const PRESET_COLORS = [
@@ -206,7 +206,9 @@ const BackgroundRemover: React.FC = () => {
         </div>
         <div>
           <h1 className="text-2xl font-bold">Background Remover</h1>
-          <p className="text-text-dim text-sm">Fast & offline · powered by ML Kit</p>
+          <p className="text-text-dim text-sm">
+            ⚠️ Online only – may crash if offline. First use: tap "Remove Background" 3–4 times.
+          </p>
         </div>
       </div>
 
