@@ -47,7 +47,6 @@ public class BackgroundRemoverPlugin extends Plugin {
                 SubjectSegmenterOptions options = new SubjectSegmenterOptions.Builder()
                         .enableForegroundBitmap()
                         .build();
-                // ✅ CORRECT: Use SubjectSegmentation.getClient(), not SubjectSegmenter.getClient()
                 SubjectSegmenter segmenter = SubjectSegmentation.getClient(options);
 
                 segmenter.process(inputImage)
