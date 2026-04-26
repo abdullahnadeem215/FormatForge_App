@@ -9,26 +9,65 @@ import {
   AlertCircle,
   CheckCircle2,
   Upload,
+  Palette
 } from 'lucide-react';
 import { useBackgroundRemover } from '../hooks/useBackgroundRemover';
 import { Share } from '@capacitor/share';
 import { Filesystem, Directory } from '@capacitor/filesystem';
 
+const PRESET_COLORS = [
+  { id: 'transparent', label: 'Clear', value: 'transparent' },
+  { id: 'white', label: 'White', value: '#FFFFFF' },
+  { id: 'black', label: 'Black', value: '#000000' },
+  { id: 'blue', label: 'Blue', value: '#2563EB' },
+  { id: 'purple', label: 'Purple', value: '#9333EA' },
+  { id: 'red', label: 'Red', value: '#DC2626' },
+];
+
 const BackgroundRemover: React.FC = () => {
   const [selectedImage, setSelectedImage] = useState<string | null>(null);
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [resultImage, setResultImage] = useState<string | null>(null);
+  
+  // Store the original transparent path so we can revert to it easily
+  const [transparentPath, setTransparentPath] = useState<string | null>(null);
+  const [activeColor, setActiveColor] = useState<string>('transparent');
 
-  const { removeBackground, isLoading, error, resultPath } = useBackgroundRemover();
+  const { removeBackground, applyBackgroundColor, isLoading, error, resultPath } = useBackgroundRemover();
 
   const handleImageSelect = (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
     if (file) {
       setSelectedFile(file);
       setResultImage(null);
+      setTransparentPath(null);
+      setActiveColor('transparent');
       const reader = new FileReader();
       reader.onload = (e) => setSelectedImage(e.target?.result as string);
       reader.readAsDataURL(file);
+    }
+  };
+
+  const loadFileIntoImage = async (path: string, isJpeg: boolean = false) => {
+    try {
+      const fileData = await Filesystem.readFile({
+        path,
+        directory: Directory.Cache,
+      });
+      const base64 = fileData.data as string;
+      const mime = isJpeg ? 'jpeg' : 'png';
+      const src = base64.startsWith('data:')
+        ? base64
+        : `data:image/${mime};base64,${base64}`;
+      setResultImage(src);
+    } catch {
+      const fileData = await Filesystem.readFile({ path });
+      const base64 = fileData.data as string;
+      const mime = isJpeg ? 'jpeg' : 'png';
+      const src = base64.startsWith('data:')
+        ? base64
+        : `data:image/${mime};base64,${base64}`;
+      setResultImage(src);
     }
   };
 
@@ -36,27 +75,29 @@ const BackgroundRemover: React.FC = () => {
     if (!selectedFile) return;
     try {
       const path = await removeBackground(selectedFile);
-      // Read fixed result for preview
-      try {
-        const fileData = await Filesystem.readFile({
-          path,
-          directory: Directory.Cache,
-        });
-        const base64 = fileData.data as string;
-        const src = base64.startsWith('data:')
-          ? base64
-          : `data:image/png;base64,${base64}`;
-        setResultImage(src);
-      } catch {
-        const fileData = await Filesystem.readFile({ path });
-        const base64 = fileData.data as string;
-        const src = base64.startsWith('data:')
-          ? base64
-          : `data:image/png;base64,${base64}`;
-        setResultImage(src);
-      }
+      setTransparentPath(path);
+      setActiveColor('transparent');
+      await loadFileIntoImage(path, false);
     } catch {
       // error already set in hook
+    }
+  };
+
+  const handleColorChange = async (colorValue: string) => {
+    if (!transparentPath) return;
+    setActiveColor(colorValue);
+
+    if (colorValue === 'transparent') {
+      await loadFileIntoImage(transparentPath, false);
+      return;
+    }
+
+    try {
+      // applyBackgroundColor handles the heavy lifting instantly
+      const newPath = await applyBackgroundColor(transparentPath, colorValue);
+      await loadFileIntoImage(newPath, true); // True because the hook saves colored bgs as JPEG
+    } catch (err) {
+      console.error('Failed to apply color', err);
     }
   };
 
@@ -65,7 +106,7 @@ const BackgroundRemover: React.FC = () => {
     try {
       const link = document.createElement('a');
       link.href = resultImage;
-      link.download = 'background_removed.png';
+      link.download = activeColor === 'transparent' ? 'background_removed.png' : 'background_colored.jpg';
       link.click();
     } catch (err) {
       console.error('Download failed', err);
@@ -73,7 +114,7 @@ const BackgroundRemover: React.FC = () => {
   };
 
   const shareImage = async () => {
-    if (!resultPath) return;
+    if (!resultPath) return; // Uses the most recent path from the hook
     try {
       await Share.share({
         title: 'Background Removed Image',
@@ -201,7 +242,7 @@ const BackgroundRemover: React.FC = () => {
             initial={{ opacity: 0, y: 16 }}
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0 }}
-            className="space-y-4"
+            className="space-y-5"
           >
             {/* Success badge */}
             <div className="flex items-center gap-2 text-green-400 text-sm font-medium">
@@ -211,13 +252,14 @@ const BackgroundRemover: React.FC = () => {
 
             {/* Checkerboard to show transparency */}
             <div
-              className="rounded-2xl overflow-hidden border border-border"
+              className="rounded-2xl overflow-hidden border border-border relative bg-black/20"
               style={{
-                backgroundImage:
+                backgroundImage: activeColor === 'transparent' ? (
                   'linear-gradient(45deg,#2a2a2a 25%,transparent 25%),' +
                   'linear-gradient(-45deg,#2a2a2a 25%,transparent 25%),' +
                   'linear-gradient(45deg,transparent 75%,#2a2a2a 75%),' +
-                  'linear-gradient(-45deg,transparent 75%,#2a2a2a 75%)',
+                  'linear-gradient(-45deg,transparent 75%,#2a2a2a 75%)'
+                ) : 'none',
                 backgroundSize: '20px 20px',
                 backgroundPosition: '0 0,0 10px,10px -10px,-10px 0',
               }}
@@ -225,8 +267,33 @@ const BackgroundRemover: React.FC = () => {
               <img
                 src={resultImage}
                 alt="Result"
-                className="w-full max-h-72 object-contain"
+                className="w-full max-h-72 object-contain transition-opacity duration-200"
               />
+            </div>
+
+            {/* Background Color Picker */}
+            <div className="space-y-3 p-4 bg-surface rounded-xl border border-border">
+              <div className="flex items-center gap-2 text-sm text-text-dim">
+                <Palette className="w-4 h-4" />
+                <span className="font-medium">Background Color</span>
+              </div>
+              <div className="flex flex-wrap gap-3">
+                {PRESET_COLORS.map((color) => (
+                  <button
+                    key={color.id}
+                    onClick={() => handleColorChange(color.value)}
+                    className={`relative w-10 h-10 rounded-full border-2 transition-transform hover:scale-110 ${
+                      activeColor === color.value ? 'border-cyan-400 scale-110' : 'border-transparent'
+                    }`}
+                    style={{
+                      background: color.value === 'transparent'
+                        ? 'repeating-conic-gradient(#666 0% 25%, transparent 0% 50%) 50% / 10px 10px'
+                        : color.value
+                    }}
+                    title={color.label}
+                  />
+                ))}
+              </div>
             </div>
 
             {/* Actions */}
