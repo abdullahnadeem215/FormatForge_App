@@ -77,18 +77,20 @@ const BackgroundRemover: React.FC = () => {
 
   const handleRemoveBackground = async () => {
     if (!selectedFile) return;
+    let pathToRemove: string | null = null;
+
     try {
       const path = await removeBackground(selectedFile);
+      pathToRemove = path; 
+      
       setTransparentPath(path);
       setActiveColor('transparent');
       
       const src = await loadFileIntoImage(path, false);
 
-      // Save to History Database
       try {
         const blob = await (await fetch(src)).blob();
         
-        // Includes all required fields for your ConversionRecord interface
         const savedRecord = await saveConversion({
           file_name: `Edited_${selectedFile.name}`,
           input_format: selectedFile.type.split('/')[1] || 'image',
@@ -112,6 +114,17 @@ const BackgroundRemover: React.FC = () => {
 
     } catch {
       // error already set in hook
+    } finally {
+      if (pathToRemove) {
+         try {
+           await Filesystem.deleteFile({
+             path: pathToRemove,
+             directory: Directory.Cache
+           });
+         } catch (e) {
+           console.warn("Failed to clean up cache file", e);
+         }
+      }
     }
   };
 
