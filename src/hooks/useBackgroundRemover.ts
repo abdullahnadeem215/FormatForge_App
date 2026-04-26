@@ -22,7 +22,7 @@ export const useBackgroundRemover = () => {
             const canvas = document.createElement('canvas');
             canvas.width = origImg.width;
             canvas.height = origImg.height;
-            // willReadFrequently optimizes the canvas for pixel extraction
+            // Optimizes the canvas for pixel manipulation
             const ctx = canvas.getContext('2d', { willReadFrequently: true });
             if (!ctx) return reject(new Error('Canvas not available'));
 
@@ -35,14 +35,14 @@ export const useBackgroundRemover = () => {
             ctx.drawImage(maskImg, 0, 0, canvas.width, canvas.height);
             const maskImageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
 
-            // 3. Pixel-by-pixel mask application
+            // 3. Pixel-by-pixel mask application: we only care about transparency
             const origPixels = origImageData.data;
             const maskPixels = maskImageData.data;
 
             for (let i = 0; i < origPixels.length; i += 4) {
               // Index [i + 3] is the Alpha (transparency) channel.
               // We copy the transparency from the ML Kit image directly to the original image.
-              // This keeps the original colors untouched while cutting out the background.
+              // This leaves the original colors untouched and cuts out the background.
               origPixels[i + 3] = maskPixels[i + 3];
             }
 
@@ -129,7 +129,7 @@ export const useBackgroundRemover = () => {
 
       if (!outputPath) throw new Error('No output path returned from ML Kit');
 
-      // Step 6: Read result file (the pink mask)
+      // Step 6: Read result file (the segmentation mask)
       let base64Result: string;
       try {
         const fileData = await Filesystem.readFile({
@@ -143,6 +143,7 @@ export const useBackgroundRemover = () => {
       }
 
       // Step 7: Apply the raw pixel mask to the original image
+      // Note: We pass 'base64Data' (the original from Step 1) and 'base64Result'
       const fixedBase64 = await applyAlphaMask(base64Data, base64Result);
 
       // Step 8: Write clean image back to cache
