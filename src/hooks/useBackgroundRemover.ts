@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { SubjectSegmentation } from '@capacitor-mlkit/subject-segmentation';
 import { Filesystem, Directory } from '@capacitor/filesystem';
+import { Capacitor } from '@capacitor/core';
 
 export const useBackgroundRemover = () => {
   const [isLoading, setIsLoading] = useState(false);
@@ -9,77 +10,111 @@ export const useBackgroundRemover = () => {
   const [error, setError] = useState<string | null>(null);
   const [resultPath, setResultPath] = useState<string | null>(null);
 
-  // Check and install the ML Kit module on hook mount
   useEffect(() => {
-    ensureModuleInstalled();
+    if (Capacitor.getPlatform() === 'android') {
+      ensureModuleInstalled();
+    } else {
+      setIsModuleReady(true);
+    }
   }, []);
 
   const ensureModuleInstalled = async (): Promise<void> => {
+    setIsInstalling(true);
+    setError(null);
+
     try {
-      const { available } = await SubjectSegmentation.isGoogleSubjectSegmentationModuleAvailable();
+      // Check availability first
+      let available = false;
+      try {
+        const result =
+          await SubjectSegmentation.isGoogleSubjectSegmentationModuleAvailable();
+        available = result.available;
+      } catch {
+        // Check failed — treat as not available, proceed to install
+        available = false;
+      }
 
       if (available) {
         setIsModuleReady(true);
+        setIsInstalling(false);
         return;
       }
 
-      // Module not available — start installation
-      setIsInstalling(true);
-
-      // Listen for install progress
+      // Set up install progress listener before calling install
       const listener = await SubjectSegmentation.addListener(
         'googleSubjectSegmentationModuleInstallProgress',
-        (event) => {
-          console.log(`ML Kit install state: ${event.state}, progress: ${event.progress}%`);
+        async (event) => {
+          console.log(`ML Kit install: state=${event.state} progress=${event.progress}%`);
 
-          // State 4 = COMPLETED
           if (event.state === 4) {
+            // COMPLETED
+            await listener.remove();
+            // Small delay to let the module fully initialize
+            await new Promise((r) => setTimeout(r, 2000));
             setIsModuleReady(true);
             setIsInstalling(false);
-            listener.remove();
           }
 
-          // State 5 = FAILED
           if (event.state === 5) {
-            setError('ML Kit module installation failed. Please try again.');
+            // FAILED
+            await listener.remove();
+            setError('ML Kit module download failed. Check your internet connection and try again.');
             setIsInstalling(false);
-            listener.remove();
           }
         }
       );
 
+      // Trigger the install
       await SubjectSegmentation.installGoogleSubjectSegmentationModule();
+
+      // If the meta-data tag is set in AndroidManifest.xml, the module may
+      // already be silently downloaded by Play Services — wait briefly and recheck
+      await new Promise((r) => setTimeout(r, 3000));
+
+      try {
+        const { available: recheckAvailable } =
+          await SubjectSegmentation.isGoogleSubjectSegmentationModuleAvailable();
+        if (recheckAvailable) {
+          await listener.remove();
+          setIsModuleReady(true);
+          setIsInstalling(false);
+        }
+        // else: listener is still active and will fire when done
+      } catch {
+        // recheck failed, let the listener handle it
+      }
 
     } catch (err: any) {
       console.error('Module install error:', err);
-      setError('Failed to initialize background remover module.');
+      setError('Failed to install ML Kit module. Please restart the app and try again.');
       setIsInstalling(false);
     }
   };
 
   const removeBackground = async (imageFile: File): Promise<string> => {
     if (!isModuleReady) {
-      throw new Error('ML Kit module is not ready yet. Please wait.');
+      throw new Error(
+        isInstalling
+          ? 'ML Kit module is still downloading, please wait.'
+          : 'ML Kit module is not ready. Please restart the app.'
+      );
     }
 
     setIsLoading(true);
     setError(null);
-
     let tempFileName: string | null = null;
 
     try {
-      // Step 1: Convert file to raw base64 (strip data URL prefix)
+      // Step 1: Convert to raw base64
       const base64Data = await new Promise<string>((resolve, reject) => {
         const reader = new FileReader();
-        reader.onloadend = () => {
-          const result = reader.result as string;
-          resolve(result.split(',')[1]);
-        };
+        reader.onloadend = () =>
+          resolve((reader.result as string).split(',')[1]);
         reader.onerror = reject;
         reader.readAsDataURL(imageFile);
       });
 
-      // Step 2: Write input image to cache so ML Kit can read it via path
+      // Step 2: Write input to cache
       tempFileName = `mlkit_input_${Date.now()}.jpg`;
       const writeInput = await Filesystem.writeFile({
         path: tempFileName,
@@ -89,13 +124,13 @@ export const useBackgroundRemover = () => {
 
       if (!writeInput?.uri) throw new Error('Failed to write input image to cache');
 
-      // Step 3: Get the real file:// path ML Kit needs
+      // Step 3: Get native file:// path
       const { uri: inputPath } = await Filesystem.getUri({
         path: tempFileName,
         directory: Directory.Cache,
       });
 
-      // Step 4: Call ML Kit — it saves the result itself and returns the path
+      // Step 4: Run ML Kit
       const { path: outputPath } = await SubjectSegmentation.processImage({
         path: inputPath,
         confidence: 0.7,
@@ -111,7 +146,6 @@ export const useBackgroundRemover = () => {
       setError(err.message || 'Background removal failed');
       throw err;
     } finally {
-      // Step 5: Clean up temp input file
       if (tempFileName) {
         Filesystem.deleteFile({ path: tempFileName, directory: Directory.Cache })
           .catch(() => {});
